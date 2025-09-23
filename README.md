@@ -99,6 +99,7 @@ pub fn main() !void {
 The Paseto library have Encode methods:
 
  - `v4.local`: paseto.V4Local
+ - `v4.public`: paseto.V4Public
 
 
 ### LICENSE
