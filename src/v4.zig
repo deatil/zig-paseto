@@ -54,8 +54,6 @@ pub fn kdf(key: []const u8, n: []const u8) !KDFData {
     auth_kdf.update(n[0..]);
     auth_kdf.final(ak[0..]);
 
-    // std.debug.print("tmp: {x} \n", .{tmp});
-
     var res: KDFData = .{};
     @memcpy(res.ek[0..], tmp[0..key_length]);
     @memcpy(res.n2[0..], tmp[key_length..]);

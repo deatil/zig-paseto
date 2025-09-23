@@ -4,12 +4,22 @@ const crypto = std.crypto;
 const Allocator = std.mem.Allocator;
 
 pub const Ed25519 = std.crypto.sign.Ed25519;
+pub const ecdsa = std.crypto.sign.ecdsa;
+pub const EcdsaP384Sha384 = ecdsa.EcdsaP384Sha384;
 
 pub const utils = @import("utils.zig");
 pub const Token = @import("token.zig").Token;
 
+pub const v3 = @import("v3.zig");
+pub const v3_local = @import("v3_local.zig");
+pub const v3_public = @import("v3_public.zig");
+
+pub const v4 = @import("v4.zig");
 pub const v4_local = @import("v4_local.zig");
 pub const v4_public = @import("v4_public.zig");
+
+pub const V3Local = Paseto(v3_local.V3Local, []const u8, []const u8);
+pub const V3Public = Paseto(v3_public.V3Public, EcdsaP384Sha384.SecretKey, EcdsaP384Sha384.PublicKey);
 
 pub const V4Local = Paseto(v4_local.V4Local, []const u8, []const u8);
 pub const V4Public = Paseto(v4_public.V4Public, Ed25519.SecretKey, Ed25519.PublicKey);

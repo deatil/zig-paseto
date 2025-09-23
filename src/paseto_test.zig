@@ -427,10 +427,10 @@ fn testV4PublicVector(
     implicit_assertion: []const u8,
 ) !void {
     var buf3: [32]u8 = undefined;
-    const pub_key_seed = try std.fmt.hexToBytes(&buf3, secret_key_seed);
+    const pri_key_seed = try std.fmt.hexToBytes(&buf3, secret_key_seed);
 
     var seed: [paseto.Ed25519.KeyPair.seed_length]u8 = undefined;
-    @memcpy(seed[0..], pub_key_seed);
+    @memcpy(seed[0..], pri_key_seed);
 
     const kp = try paseto.Ed25519.KeyPair.generateDeterministic(seed);
 
@@ -500,5 +500,283 @@ test "v4 PublicVector" {
         "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
         "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}",
         "{\"test-vector\":\"4-S-3\"}",
+    );
+}
+
+// ======================================
+
+test "V3Local EncryptDecrypt" {
+    const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
+
+    var buf: [32]u8 = undefined;
+    const k = try std.fmt.hexToBytes(&buf, key);
+
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}";
+    const i = "{\"test-vector\":\"4-S-3\"}";
+
+    const alloc = testing.allocator;
+
+    var e = paseto.V3Local.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    const token = try e.encode(crypto.random, k);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V3Local.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, k);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+fn testV3LocalVectorT(comptime nonce: []const u8) type {
+    return struct {
+        fn testLocalVector(
+            key: []const u8,
+            token: []const u8,
+            payload: []const u8,
+            footer: []const u8,
+            implicit_assertion: []const u8,
+        ) !void {
+            var buf: [32]u8 = undefined;
+            const k = try std.fmt.hexToBytes(&buf, key);
+
+            const test_rng: std.Random = .{
+                .ptr = undefined,
+                .fillFn = TestRNG(nonce).fill,
+            };
+
+            const alloc = testing.allocator;
+
+            var e = paseto.V3Local.init(alloc);
+            defer e.deinit();
+
+            try e.withMessage(payload);
+            try e.withFooter(footer);
+            try e.withImplicit(implicit_assertion);
+
+            const encoded = try e.encode(test_rng, k);
+            defer alloc.free(encoded);
+
+            try testing.expectFmt(token, "{s}", .{encoded});
+
+            // ==================
+
+            var p = paseto.V3Local.init(alloc);
+            defer p.deinit();
+
+            try p.withImplicit(implicit_assertion);
+
+            try p.decode(token, k);
+
+            try testing.expectFmt(payload, "{s}", .{p.message});
+        }
+    };
+}
+
+test "v3 LocalVector" {
+    // https://github.com/paseto-standard/test-vectors/blob/master/v3.json
+
+    // 4-E-1
+    try testV3LocalVectorT("0000000000000000000000000000000000000000000000000000000000000000").testLocalVector(
+        "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+        "v3.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADbfcIURX_0pVZVU1mAESUzrKZAsRm2EsD6yBoZYn6cpVZNzSJOhSDN-sRaWjfLU-yn9OJH1J_B8GKtOQ9gSQlb8yk9Iza7teRdkiR89ZFyvPPsVjjFiepFUVcMa-LP18zV77f_crJrVXWa5PDNRkCSeHfBBeg",
+        "{\"data\":\"this is a secret message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "",
+        "",
+    );
+    // 4-E-2
+    try testV3LocalVectorT("0000000000000000000000000000000000000000000000000000000000000000").testLocalVector(
+        "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+        "v3.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADbfcIURX_0pVZVU1mAESUzrKZAqhWxBMDgyBoZYn6cpVZNzSJOhSDN-sRaWjfLU-yn9OJH1J_B8GKtOQ9gSQlb8yk9IzZfaZpReVpHlDSwfuygx1riVXYVs-UjcrG_apl9oz3jCVmmJbRuKn5ZfD8mHz2db0A",
+        "{\"data\":\"this is a hidden message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "",
+        "",
+    );
+    // 4-E-3
+    try testV3LocalVectorT("26f7553354482a1d91d4784627854b8da6b8042a7966523c2b404e8dbbe7f7f2").testLocalVector(
+        "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+        "v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQnDait-Q-sjhF88dG2B0ROIIykcrGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRsdEK5SDvl02_HjWKJW2oqGMOQJlxnt5xyhQjFJomwnt7WW_7r2VT0G704ifult011-TgLCyQ2X8imQhniG_hAQ4BydM",
+        "{\"data\":\"this is a secret message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "",
+        "",
+    );
+    // 4-E-4
+    try testV3LocalVectorT("26f7553354482a1d91d4784627854b8da6b8042a7966523c2b404e8dbbe7f7f2").testLocalVector(
+        "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+        "v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQnDait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRsdEK5SDvl02_HjWKJW2oqGMOQJlBZa_gOpVj4gv0M9lV6Pwjp8JS_MmaZaTA1LLTULXybOBZ2S4xMbYqYmDRhh3IgEk",
+        "{\"data\":\"this is a hidden message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "",
+        "",
+    );
+    // 4-E-5
+    try testV3LocalVectorT("26f7553354482a1d91d4784627854b8da6b8042a7966523c2b404e8dbbe7f7f2").testLocalVector(
+        "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+        "v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQnDait-Q-sjhF88dG2B0ROIIykcrGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRsdEK5SDvl02_HjWKJW2oqGMOQJlkYSIbXOgVuIQL65UMdW9WcjOpmqvjqD40NNzed-XPqn1T3w-bJvitYpUJL_rmihc.eyJraWQiOiJVYmtLOFk2aXY0R1poRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9",
+        "{\"data\":\"this is a secret message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "{\"kid\":\"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo\"}",
+        "",
+    );
+    // 4-E-6
+    try testV3LocalVectorT("26f7553354482a1d91d4784627854b8da6b8042a7966523c2b404e8dbbe7f7f2").testLocalVector(
+        "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+        "v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQnDait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRsdEK5SDvl02_HjWKJW2oqGMOQJmSeEMphEWHiwtDKJftg41O1F8Hat-8kQ82ZIAMFqkx9q5VkWlxZke9ZzMBbb3Znfo.eyJraWQiOiJVYmtLOFk2aXY0R1poRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9",
+        "{\"data\":\"this is a hidden message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "{\"kid\":\"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo\"}",
+        "",
+    );
+    // 4-E-7
+    try testV3LocalVectorT("26f7553354482a1d91d4784627854b8da6b8042a7966523c2b404e8dbbe7f7f2").testLocalVector(
+        "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+        "v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQnDait-Q-sjhF88dG2B0ROIIykcrGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRsdEK5SDvl02_HjWKJW2oqGMOQJkzWACWAIoVa0bz7EWSBoTEnS8MvGBYHHo6t6mJunPrFR9JKXFCc0obwz5N-pxFLOc.eyJraWQiOiJVYmtLOFk2aXY0R1poRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9",
+        "{\"data\":\"this is a secret message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "{\"kid\":\"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo\"}",
+        "{\"test-vector\":\"3-E-7\"}",
+    );
+    // 4-E-8
+    try testV3LocalVectorT("26f7553354482a1d91d4784627854b8da6b8042a7966523c2b404e8dbbe7f7f2").testLocalVector(
+        "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+        "v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQnDait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRsdEK5SDvl02_HjWKJW2oqGMOQJmZHSSKYR6AnPYJV6gpHtx6dLakIG_AOPhu8vKexNyrv5_1qoom6_NaPGecoiz6fR8.eyJraWQiOiJVYmtLOFk2aXY0R1poRnA2VHgzSVdMV0xmTlhTRXZKY2RUM3pkUjY1WVp4byJ9",
+        "{\"data\":\"this is a hidden message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "{\"kid\":\"UbkK8Y6iv4GZhFp6Tx3IWLWLfNXSEvJcdT3zdR65YZxo\"}",
+        "{\"test-vector\":\"3-E-8\"}",
+    );
+    // 4-E-9
+    try testV3LocalVectorT("26f7553354482a1d91d4784627854b8da6b8042a7966523c2b404e8dbbe7f7f2").testLocalVector(
+        "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f",
+        "v3.local.JvdVM1RIKh2R1HhGJ4VLjaa4BCp5ZlI8K0BOjbvn9_LwY78vQnDait-Q-sjhF88dG2B0X-4P3EcxGHn8wzPbTrqObHhyoKpjy3cwZQzLdiwRsdEK5SDvl02_HjWKJW2oqGMOQJlk1nli0_wijTH_vCuRwckEDc82QWK8-lG2fT9wQF271sgbVRVPjm0LwMQZkvvamqU.YXJiaXRyYXJ5LXN0cmluZy10aGF0LWlzbid0LWpzb24",
+        "{\"data\":\"this is a hidden message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "arbitrary-string-that-isn't-json",
+        "{\"test-vector\":\"3-E-9\"}",
+    );
+}
+
+// ======================================
+
+test "V3Public EncryptDecrypt" {
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}";
+    const i = "{\"test-vector\":\"3-S-3\"}";
+
+    const alloc = testing.allocator;
+
+    const kp = paseto.EcdsaP384Sha384.KeyPair.generate();
+
+    var e = paseto.V3Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    const token = try e.encode(crypto.random, kp.secret_key);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V3Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, kp.public_key);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+fn testV3PublicVector(
+    public_key: []const u8,
+    secret_key: []const u8,
+    token: []const u8,
+    payload: []const u8,
+    footer: []const u8,
+    implicit_assertion: []const u8,
+) !void {
+    var buf3: [48]u8 = undefined;
+    const pri_key_seed = try std.fmt.hexToBytes(&buf3, secret_key);
+
+    var pri_bytes: [paseto.EcdsaP384Sha384.SecretKey.encoded_length]u8 = undefined;
+    @memcpy(pri_bytes[0..], pri_key_seed);
+
+    const pri = try paseto.EcdsaP384Sha384.SecretKey.fromBytes(pri_bytes);
+    const kp = try paseto.EcdsaP384Sha384.KeyPair.fromSecretKey(pri);
+
+    const sk = kp.secret_key;
+    const pk = kp.public_key;
+
+    try testing.expectFmt(secret_key, "{x}", .{sk.toBytes()});
+    try testing.expectFmt(public_key, "{x}", .{pk.toCompressedSec1()});
+
+    // =====================
+
+    const alloc = testing.allocator;
+
+    var e = paseto.V3Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(payload);
+    try e.withFooter(footer);
+    try e.withImplicit(implicit_assertion);
+
+    const encoded = try e.encode(crypto.random, sk);
+    defer alloc.free(encoded);
+
+    try testing.expectEqual(true, encoded.len > 0);
+
+    // ==================
+
+    var p = paseto.V3Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(implicit_assertion);
+
+    try p.decode(token, pk);
+
+    try testing.expectFmt(payload, "{s}", .{p.message});
+}
+
+test "v3 PublicVector" {
+    // https://github.com/paseto-standard/test-vectors/blob/master/v3.json
+
+    // 3-S-1
+    try testV3PublicVector(
+        "02fbcb7c69ee1c60579be7a334134878d9c5c5bf35d552dab63c0140397ed14cef637d7720925c44699ea30e72874c72fb",
+        "20347609607477aca8fbfbc5e6218455f3199669792ef8b466faa87bdc67798144c848dd03661eed5ac62461340cea96",
+        "v3.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwiZXhwIjoiMjAyMi0wMS0wMVQwMDowMDowMCswMDowMCJ9qqEwwrKHKi5lJ7b9MBKc0G4MGZy0ptUiMv3lAUAaz-JY_zjoqBSIxMxhfAoeNYiSyvfUErj76KOPWm1OeNnBPkTSespeSXDGaDfxeIrl3bRrPEIy7tLwLAIsRzsXkfph",
+        "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "",
+        "",
+    );
+    // 3-S-2
+    try testV3PublicVector(
+        "02fbcb7c69ee1c60579be7a334134878d9c5c5bf35d552dab63c0140397ed14cef637d7720925c44699ea30e72874c72fb",
+        "20347609607477aca8fbfbc5e6218455f3199669792ef8b466faa87bdc67798144c848dd03661eed5ac62461340cea96",
+        "v3.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwiZXhwIjoiMjAyMi0wMS0wMVQwMDowMDowMCswMDowMCJ9ZWrbGZ6L0MDK72skosUaS0Dz7wJ_2bMcM6tOxFuCasO9GhwHrvvchqgXQNLQQyWzGC2wkr-VKII71AvkLpC8tJOrzJV1cap9NRwoFzbcXjzMZyxQ0wkshxZxx8ImmNWP.eyJraWQiOiJkWWtJU3lseFFlZWNFY0hFTGZ6Rjg4VVpyd2JMb2xOaUNkcHpVSEd3OVVxbiJ9",
+        "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}",
+        "",
+    );
+    // 3-S-3
+    try testV3PublicVector(
+        "02fbcb7c69ee1c60579be7a334134878d9c5c5bf35d552dab63c0140397ed14cef637d7720925c44699ea30e72874c72fb",
+        "20347609607477aca8fbfbc5e6218455f3199669792ef8b466faa87bdc67798144c848dd03661eed5ac62461340cea96",
+        "v3.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwiZXhwIjoiMjAyMi0wMS0wMVQwMDowMDowMCswMDowMCJ94SjWIbjmS7715GjLSnHnpJrC9Z-cnwK45dmvnVvCRQDCCKAXaKEopTajX0DKYx1Xqr6gcTdfqscLCAbiB4eOW9jlt-oNqdG8TjsYEi6aloBfTzF1DXff_45tFlnBukEX.eyJraWQiOiJkWWtJU3lseFFlZWNFY0hFTGZ6Rjg4VVpyd2JMb2xOaUNkcHpVSEd3OVVxbiJ9",
+        "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}",
+        "{\"test-vector\":\"3-S-3\"}",
     );
 }

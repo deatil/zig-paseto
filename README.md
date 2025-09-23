@@ -98,6 +98,9 @@ pub fn main() !void {
 
 The Paseto library have Encode methods:
 
+ - `v3.local`: paseto.V3Local
+ - `v3.public`: paseto.V3Public
+
  - `v4.local`: paseto.V4Local
  - `v4.public`: paseto.V4Public
 
