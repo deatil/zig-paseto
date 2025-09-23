@@ -67,7 +67,7 @@ pub fn EncodeV4Local(comptime name: []const u8) type {
 
         pub fn decode(self: Self, encoded: []const u8, key: []const u8, f: []const u8, i: []const u8) ![]u8 {
             if (key.len != 32) {
-                return error.InvalidKeySize;
+                return error.PasetoInvalidKeySize;
             }
 
             // Extract components
@@ -98,7 +98,7 @@ pub fn EncodeV4Local(comptime name: []const u8) type {
     };
 }
 
-test "V4Local" {
+test "V4Local EncryptDecrypt" {
     const alloc = testing.allocator;
     const e = V4Local.init(alloc);
 
@@ -122,7 +122,7 @@ test "V4Local" {
     try testing.expectFmt(msg, "{s}", .{res});
 }
 
-test "V4Local EncryptDecrypt" {
+test "V4Local Decrypt check" {
     const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
 
     var buf: [32]u8 = undefined;
@@ -144,4 +144,77 @@ test "V4Local EncryptDecrypt" {
     defer alloc.free(res);
 
     try testing.expectFmt(m, "{s}", .{res});
+}
+
+test "V4Local fail" {
+    {
+        const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e";
+
+        var buf: [32]u8 = undefined;
+        const k = try std.fmt.hexToBytes(&buf, key);
+
+        const f = "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}";
+        const i = "{\"test-vector\":\"4-S-3\"}";
+
+        const encoded = "459a60102b02cee79e781177e43a643d53760d972c53a17df4711d499dbc9475215401974dcd3a9018c8e8fc3ca96e18fda7235613b6d5d816b028329d0e76febc639b594d838bcd9fd5d03a6759f5eb11dc827b29abaa2dcf37bc0cf25c16fcc642111e056af2ce52aa10e25a6cdd2013ed2add99ba893b02ccbd4edaf3b8f9bea1de2c15";
+
+        var encoded2: [133]u8 = undefined;
+        const encoded3 = try std.fmt.hexToBytes(&encoded2, encoded);
+
+        const alloc = testing.allocator;
+        const e = V4Local.init(alloc);
+
+        var need_true: bool = false;
+        _ = e.decode(encoded3[0..], k, f, i) catch |err| {
+            need_true = true;
+            try testing.expectEqual(error.PasetoInvalidKeySize, err);
+        };
+        try testing.expectEqual(true, need_true);
+    }
+
+    {
+        const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e";
+
+        var buf: [32]u8 = undefined;
+        const k = try std.fmt.hexToBytes(&buf, key);
+
+        const msg = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+        const f = "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}";
+        const i = "{\"test-vector\":\"4-S-3\"}";
+
+        const alloc = testing.allocator;
+        const e = V4Local.init(alloc);
+
+        var need_true: bool = false;
+        _ = e.encode(crypto.random, msg, k, f, i) catch |err| {
+            need_true = true;
+            try testing.expectEqual(error.PasetoInvalidKeySize, err);
+        };
+        try testing.expectEqual(true, need_true);
+    }
+
+    {
+        const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
+
+        var buf: [32]u8 = undefined;
+        const k = try std.fmt.hexToBytes(&buf, key);
+
+        const f = "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}";
+        const i = "{\"test-vector\":\"4-S-3\"}";
+
+        const encoded = "459a60102b02cee79e781177e43a643d53760d972c53a17df4711d499dbc9475215401974dcd3a9018c8e8fc3ca96e18fda7235613b6d5d816b028329d0e76febc639b594d838bcd9fd5d03a6759f5eb11dc827b29abaa2dcf37bc0cf25c16fcc642111e056af2ce52aa10e25a6cdd2013ed2add99ba893b02ccbd4edaf3b8f9bea1de2c15";
+
+        var encoded2: [133]u8 = undefined;
+        const encoded3 = try std.fmt.hexToBytes(&encoded2, encoded);
+
+        const alloc = testing.allocator;
+        const e = V4Local.init(alloc);
+
+        var need_true: bool = false;
+        _ = e.decode(encoded3[0..], k, f, i) catch |err| {
+            need_true = true;
+            try testing.expectEqual(error.PasetoInvalidPreAuthenticationHeader, err);
+        };
+        try testing.expectEqual(true, need_true);
+    }
 }

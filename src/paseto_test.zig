@@ -181,6 +181,58 @@ test "V4Local EncryptDecrypt Check" {
     try testing.expectFmt(i, "{s}", .{p.implicit});
 }
 
+test "V4Local Decrypt fail" {
+    {
+        const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
+
+        var buf: [32]u8 = undefined;
+        const k = try std.fmt.hexToBytes(&buf, key);
+
+        const i = "{\"test-vector\":\"4-S-3\"}";
+
+        const token = "v4.local2.RZpgECsCzueeeBF35DpkPVN2DZcsU6F99HEdSZ28lHUhVAGXTc06kBjI6Pw8qW4Y_acjVhO21dgWsCgynQ52_rxjm1lNg4vNn9XQOmdZ9esR3IJ7KauqLc83vAzyXBb8xkIRHgVq8s5SqhDiWmzdIBPtKt2Zuok7Asy9TtrzuPm-od4sEw.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9lQTlDT2NOeTlEZmdMMVc2MGhhTiJ9";
+
+        const alloc = testing.allocator;
+
+        var p = paseto.V4Local.init(alloc);
+        defer p.deinit();
+
+        try p.withImplicit(i);
+
+        var need_true: bool = false;
+        _ = p.decode(token, k) catch |err| {
+            need_true = true;
+            try testing.expectEqual(paseto.Error.PasetoTokAlgoInvalid, err);
+        };
+        try testing.expectEqual(true, need_true);
+    }
+
+    {
+        const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
+
+        var buf: [32]u8 = undefined;
+        const k = try std.fmt.hexToBytes(&buf, key);
+
+        const i = "{\"test-vector\":\"4-S-3\"}";
+
+        const token = "v4-local.RZpgECsCzueeeBF35DpkPVN2DZcsU6F99HEdSZ28lHUhVAGXTc06kBjI6Pw8qW4Y_acjVhO21dgWsCgynQ52_rxjm1lNg4vNn9XQOmdZ9esR3IJ7KauqLc83vAzyXBb8xkIRHgVq8s5SqhDiWmzdIBPtKt2Zuok7Asy9TtrzuPm-od4sEw";
+
+        const alloc = testing.allocator;
+
+        var p = paseto.V4Local.init(alloc);
+        defer p.deinit();
+
+        try p.withImplicit(i);
+
+        var need_true: bool = false;
+        _ = p.decode(token, k) catch |err| {
+            need_true = true;
+            try testing.expectEqual(paseto.Error.PasetoTokenInvalid, err);
+        };
+        try testing.expectEqual(true, need_true);
+    }
+}
+
 pub fn TestRNG(comptime buf: []const u8) type {
     return struct {
         fn fill(_: *anyopaque, buffer: []u8) void {
@@ -327,5 +379,126 @@ test "v4 LocalVector" {
         "{\"data\":\"this is a hidden message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
         "arbitrary-string-that-isn't-json",
         "{\"test-vector\":\"4-E-9\"}",
+    );
+}
+
+// ======================================
+
+test "V4Public EncryptDecrypt" {
+    const kp = paseto.Ed25519.KeyPair.generate();
+
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}";
+    const i = "{\"test-vector\":\"4-S-3\"}";
+
+    const alloc = testing.allocator;
+
+    var e = paseto.V4Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    const token = try e.encode(crypto.random, kp.secret_key);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V4Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, kp.public_key);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+fn testV4PublicVector(
+    public_key: []const u8,
+    secret_key: []const u8,
+    secret_key_seed: []const u8,
+    token: []const u8,
+    payload: []const u8,
+    footer: []const u8,
+    implicit_assertion: []const u8,
+) !void {
+    var buf3: [32]u8 = undefined;
+    const pub_key_seed = try std.fmt.hexToBytes(&buf3, secret_key_seed);
+
+    var seed: [paseto.Ed25519.KeyPair.seed_length]u8 = undefined;
+    @memcpy(seed[0..], pub_key_seed);
+
+    const kp = try paseto.Ed25519.KeyPair.generateDeterministic(seed);
+
+    const sk = kp.secret_key;
+    const pk = kp.public_key;
+
+    try testing.expectFmt(secret_key, "{x}", .{sk.bytes});
+    try testing.expectFmt(public_key, "{x}", .{pk.bytes});
+
+    // =====================
+
+    const alloc = testing.allocator;
+
+    var e = paseto.V4Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(payload);
+    try e.withFooter(footer);
+    try e.withImplicit(implicit_assertion);
+
+    const encoded = try e.encode(crypto.random, sk);
+    defer alloc.free(encoded);
+
+    try testing.expectFmt(token, "{s}", .{encoded});
+
+    // ==================
+
+    var p = paseto.V4Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(implicit_assertion);
+
+    try p.decode(token, pk);
+
+    try testing.expectFmt(payload, "{s}", .{p.message});
+}
+
+test "v4 PublicVector" {
+    // https://github.com/paseto-standard/test-vectors/blob/master/v4.json
+
+    // 4-S-1
+    try testV4PublicVector(
+        "1eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2",
+        "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a37741eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2",
+        "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a3774",
+        "v4.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwiZXhwIjoiMjAyMi0wMS0wMVQwMDowMDowMCswMDowMCJ9bg_XBBzds8lTZShVlwwKSgeKpLT3yukTw6JUz3W4h_ExsQV-P0V54zemZDcAxFaSeef1QlXEFtkqxT1ciiQEDA",
+        "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "",
+        "",
+    );
+    // 4-S-2
+    try testV4PublicVector(
+        "1eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2",
+        "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a37741eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2",
+        "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a3774",
+        "v4.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwiZXhwIjoiMjAyMi0wMS0wMVQwMDowMDowMCswMDowMCJ9v3Jt8mx_TdM2ceTGoqwrh4yDFn0XsHvvV_D0DtwQxVrJEBMl0F2caAdgnpKlt4p7xBnx1HcO-SPo8FPp214HDw.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9lQTlDT2NOeTlEZmdMMVc2MGhhTiJ9",
+        "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}",
+        "",
+    );
+    // 4-S-3
+    try testV4PublicVector(
+        "1eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2",
+        "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a37741eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2",
+        "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a3774",
+        "v4.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwiZXhwIjoiMjAyMi0wMS0wMVQwMDowMDowMCswMDowMCJ9NPWciuD3d0o5eXJXG5pJy-DiVEoyPYWs1YSTwWHNJq6DZD3je5gf-0M4JR9ipdUSJbIovzmBECeaWmaqcaP0DQ.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9lQTlDT2NOeTlEZmdMMVc2MGhhTiJ9",
+        "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
+        "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}",
+        "{\"test-vector\":\"4-S-3\"}",
     );
 }

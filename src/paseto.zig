@@ -3,19 +3,23 @@ const json = std.json;
 const crypto = std.crypto;
 const Allocator = std.mem.Allocator;
 
+pub const Ed25519 = std.crypto.sign.Ed25519;
+
 pub const utils = @import("utils.zig");
 pub const Token = @import("token.zig").Token;
 
 pub const v4_local = @import("v4_local.zig");
+pub const v4_public = @import("v4_public.zig");
 
-pub const V4Local = NewPaseto(v4_local.V4Local, []const u8, []const u8);
+pub const V4Local = Paseto(v4_local.V4Local, []const u8, []const u8);
+pub const V4Public = Paseto(v4_public.V4Public, Ed25519.SecretKey, Ed25519.PublicKey);
 
-const Error = error{
+pub const Error = error{
     PasetoTokenInvalid,
     PasetoTokAlgoInvalid,
 };
 
-pub fn NewPaseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime DecodeKeyType: type) type {
+pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime DecodeKeyType: type) type {
     return struct {
         message: []const u8 = "",
         footer: []const u8 = "",
