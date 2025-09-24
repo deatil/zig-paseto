@@ -8,13 +8,13 @@ A PASETO (Platform-Agnostic SEcurity TOkens) library for zig.
  - Zig >= 0.16.0-dev.164+bc7955306.
 
 
-# What is PASETO?
+### What is PASETO?
 
 PASETO (Platform-Agnostic SEcurity TOkens) is a specification and reference implementation
 for secure stateless tokens.
 
 
-## Key Differences between PASETO and JWT
+### Key Differences between PASETO and JWT
 
 Unlike JSON Web Tokens (JWT), which gives developers more than enough rope with which to
 hang themselves, PASETO only allows secure operations. JWT gives you "algorithm agility",
