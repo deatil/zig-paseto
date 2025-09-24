@@ -1,11 +1,25 @@
 ## Zig-paseto 
 
-A Paseto library for zig.
+A PASETO (Platform-Agnostic SEcurity TOkens) library for zig.
 
 
 ### Env
 
  - Zig >= 0.16.0-dev.164+bc7955306.
+
+
+# What is PASETO?
+
+PASETO (Platform-Agnostic SEcurity TOkens) is a specification and reference implementation
+for secure stateless tokens.
+
+
+## Key Differences between PASETO and JWT
+
+Unlike JSON Web Tokens (JWT), which gives developers more than enough rope with which to
+hang themselves, PASETO only allows secure operations. JWT gives you "algorithm agility",
+PASETO gives you "versioned protocols". It's incredibly unlikely that you'll be able to
+use PASETO in [an insecure way](https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries).
 
 
 ### Adding zig-paseto as a dependency
@@ -97,6 +111,12 @@ pub fn main() !void {
 ### Encode Methods
 
 The Paseto library have Encode methods:
+
+ - `v1.local`: paseto.V1Local
+ - `v1.public`: paseto.V1Public
+
+ - `v2.local`: paseto.V2Local
+ - `v2.public`: paseto.V2Public
 
  - `v3.local`: paseto.V3Local
  - `v3.public`: paseto.V3Public

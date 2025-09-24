@@ -1,5 +1,4 @@
 const std = @import("std");
-const fmt = std.fmt;
 const crypto = std.crypto;
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
@@ -39,7 +38,7 @@ pub fn EncodeV3Local(comptime name: []const u8) type {
             var nonce: [32]u8 = undefined;
             r.bytes(&nonce);
 
-            // Encrypt the JSON payload
+            // Encrypt the payload
             var ciphertext = try self.alloc.alloc(u8, msg.len);
             defer self.alloc.free(ciphertext);
 
@@ -78,6 +77,7 @@ pub fn EncodeV3Local(comptime name: []const u8) type {
             }
 
             var out = try self.alloc.alloc(u8, c.len);
+            errdefer self.alloc.free(out);
 
             // Use an AES-256-CTR stream cipher
             // Decrypt the payload

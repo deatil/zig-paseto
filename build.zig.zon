@@ -1,6 +1,6 @@
 .{
     .name = .zig_paseto,
-    .version = "1.0.0",
+    .version = "1.0.1",
     .fingerprint = 0xf32aef9aea947384,
     .minimum_zig_version = "0.16.0-dev.164+bc7955306",
     .dependencies = .{},

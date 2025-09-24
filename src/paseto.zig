@@ -1,14 +1,23 @@
 const std = @import("std");
 const json = std.json;
-const crypto = std.crypto;
 const Allocator = std.mem.Allocator;
 
 pub const Ed25519 = std.crypto.sign.Ed25519;
 pub const ecdsa = std.crypto.sign.ecdsa;
 pub const EcdsaP384Sha384 = ecdsa.EcdsaP384Sha384;
 
+pub const rsa = @import("rsa/rsa.zig");
+pub const parser = @import("parser.zig");
 pub const utils = @import("utils.zig");
 pub const Token = @import("token.zig").Token;
+
+pub const v1 = @import("v1.zig");
+pub const v1_local = @import("v1_local.zig");
+pub const v1_public = @import("v1_public.zig");
+
+pub const v2 = @import("v2.zig");
+pub const v2_local = @import("v2_local.zig");
+pub const v2_public = @import("v2_public.zig");
 
 pub const v3 = @import("v3.zig");
 pub const v3_local = @import("v3_local.zig");
@@ -17,6 +26,12 @@ pub const v3_public = @import("v3_public.zig");
 pub const v4 = @import("v4.zig");
 pub const v4_local = @import("v4_local.zig");
 pub const v4_public = @import("v4_public.zig");
+
+pub const V1Local = Paseto(v1_local.V1Local, []const u8, []const u8);
+pub const V1Public = Paseto(v1_public.V1Public, rsa.SecretKey, rsa.PublicKey);
+
+pub const V2Local = Paseto(v2_local.V2Local, []const u8, []const u8);
+pub const V2Public = Paseto(v2_public.V2Public, Ed25519.SecretKey, Ed25519.PublicKey);
 
 pub const V3Local = Paseto(v3_local.V3Local, []const u8, []const u8);
 pub const V3Public = Paseto(v3_public.V3Public, EcdsaP384Sha384.SecretKey, EcdsaP384Sha384.PublicKey);
@@ -104,7 +119,7 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
             return utils.jsonDecodeT(T, self.alloc, self.implicit);
         }
 
-        // encode token
+        // encode paseto token
         pub fn encode(self: *Self, r: std.Random, encode_key: EncodeKeyType) ![]const u8 {
             const encoded = try self.encoder.encode(r, self.message, encode_key, self.footer, self.implicit);
             defer self.alloc.free(encoded);
@@ -121,7 +136,7 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
             return encoded_string;
         }
 
-        // decode token
+        // decode paseto token
         pub fn decode(self: *Self, token_string: []const u8, decode_key: DecodeKeyType) !void {
             var t = try self.parseToken(token_string);
             defer t.deinit();

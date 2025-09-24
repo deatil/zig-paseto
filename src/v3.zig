@@ -1,6 +1,4 @@
 const std = @import("std");
-const fmt = std.fmt;
-const crypto = std.crypto;
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const hkdf = std.crypto.kdf.hkdf;
@@ -41,7 +39,6 @@ pub fn kdf(alloc: Allocator, key: []const u8, n: []const u8) !KDFData {
     const salt = [_]u8{};
     const prk = enc_kdf.extract(&salt, key);
 
-    // Split encryption key (Ek) and nonce (n2)
     var tmp: [48]u8 = undefined;
     enc_kdf.expand(&tmp, context, prk);
 
@@ -61,7 +58,6 @@ pub fn kdf(alloc: Allocator, key: []const u8, n: []const u8) !KDFData {
     const salt2 = [_]u8{};
     const prk2 = auth_kdf.extract(&salt2, key);
 
-    // Split encryption key (Ek) and nonce (n2)
     var ak: [48]u8 = undefined;
     auth_kdf.expand(&ak, context2, prk2);
 

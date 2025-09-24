@@ -1,8 +1,11 @@
 const std = @import("std");
 const testing = std.testing;
 const crypto = std.crypto;
+const Ed25519 = std.crypto.sign.Ed25519;
 
-pub const paseto = @import("paseto.zig");
+const paseto = @import("paseto.zig");
+const utils = @import("utils.zig");
+const rsa = @import("rsa/rsa.zig");
 
 test "V4Local EncryptDecrypt" {
     const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
@@ -778,5 +781,688 @@ test "v3 PublicVector" {
         "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}",
         "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}",
         "{\"test-vector\":\"3-S-3\"}",
+    );
+}
+
+test "V3Public EncryptDecrypt with der key" {
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}";
+    const i = "{\"test-vector\":\"3-S-3\"}";
+
+    const alloc = testing.allocator;
+
+    const prikey = "MIGkAgEBBDDqWgdCzllebram3uEH+cbKAjsu5xHwL/kZa97cfTJVdZ4j+IMj99PHZkdfxli2vo2gBwYFK4EEACKhZANiAAS5Zzmt6BAsk5mfpCqYBXK3PVy8Vgvkof3+8XLoRpq04PjnwLtdtY/M5pnMxsyWbIRbZHtB8Qkeb71EF+jg7WAtb9B013H1rvlbtVXu0uCmUE3J8hQ3EqY6ugmwqUUhi0M=";
+    const pubkey = "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEuWc5regQLJOZn6QqmAVytz1cvFYL5KH9/vFy6EaatOD458C7XbWPzOaZzMbMlmyEW2R7QfEJHm+9RBfo4O1gLW/QdNdx9a75W7VV7tLgplBNyfIUNxKmOroJsKlFIYtD";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
+
+    const secret_key = try paseto.parser.ParseEcdsaP384Sha384Der.parseSecretKeyDer(prikey_bytes);
+    const public_key = try paseto.parser.ParseEcdsaP384Sha384Der.parsePublicKeyDer(pubkey_bytes);
+
+    var e = paseto.V3Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    const token = try e.encode(crypto.random, secret_key);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V3Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, public_key);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+// ======================================
+
+test "V2Local EncryptDecrypt" {
+    const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
+
+    var buf: [32]u8 = undefined;
+    const k = try std.fmt.hexToBytes(&buf, key);
+
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}";
+    const i = "{\"test-vector\":\"2-E-3\"}";
+
+    const alloc = testing.allocator;
+
+    var e = paseto.V2Local.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    const token = try e.encode(crypto.random, k);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V2Local.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, k);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+fn testV2LocalVectorT(comptime nonce: []const u8) type {
+    return struct {
+        fn testLocalVector(
+            key: []const u8,
+            token: []const u8,
+            payload: []const u8,
+            footer: []const u8,
+        ) !void {
+            var buf: [32]u8 = undefined;
+            const k = try std.fmt.hexToBytes(&buf, key);
+
+            const test_rng: std.Random = .{
+                .ptr = undefined,
+                .fillFn = TestRNG(nonce).fill,
+            };
+
+            const alloc = testing.allocator;
+
+            var e = paseto.V2Local.init(alloc);
+            defer e.deinit();
+
+            try e.withMessage(payload);
+            try e.withFooter(footer);
+
+            const encoded = try e.encode(test_rng, k);
+            defer alloc.free(encoded);
+
+            try testing.expectFmt(token, "{s}", .{encoded});
+
+            // ==================
+
+            var p = paseto.V2Local.init(alloc);
+            defer p.deinit();
+
+            try p.decode(token, k);
+
+            try testing.expectFmt(payload, "{s}", .{p.message});
+        }
+    };
+}
+
+test "v2 LocalVector" {
+    const nullKey = "0000000000000000000000000000000000000000000000000000000000000000";
+    const fullKey = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+    const symmetricKey = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
+
+    const nonce = "000000000000000000000000000000000000000000000000";
+    const nonce2 = "45742c976d684ff84ebdc0de59809a97cda2f64c84fda19b";
+
+    const footer = "Cuon Alpinus";
+    const payload = "Love is stronger than hate or fear";
+
+    try testV2LocalVectorT(nonce).testLocalVector(
+        nullKey,
+        "v2.local.driRNhM20GQPvlWfJCepzh6HdijAq-yNUtKpdy5KXjKfpSKrOlqQvQ",
+        "",
+        "",
+    );
+    try testV2LocalVectorT(nonce).testLocalVector(
+        fullKey,
+        "v2.local.driRNhM20GQPvlWfJCepzh6HdijAq-yNSOvpveyCsjPYfe9mtiJDVg",
+        "",
+        "",
+    );
+    try testV2LocalVectorT(nonce).testLocalVector(
+        symmetricKey,
+        "v2.local.driRNhM20GQPvlWfJCepzh6HdijAq-yNkIWACdHuLiJiW16f2GuGYA",
+        "",
+        "",
+    );
+
+    try testV2LocalVectorT(nonce).testLocalVector(
+        nullKey,
+        "v2.local.driRNhM20GQPvlWfJCepzh6HdijAq-yNfzz6yGkE4ZxojJAJwKLfvg.Q3VvbiBBbHBpbnVz",
+        "",
+        footer,
+    );
+    try testV2LocalVectorT(nonce).testLocalVector(
+        fullKey,
+        "v2.local.driRNhM20GQPvlWfJCepzh6HdijAq-yNJbTJxAGtEg4ZMXY9g2LSoQ.Q3VvbiBBbHBpbnVz",
+        "",
+        footer,
+    );
+    try testV2LocalVectorT(nonce).testLocalVector(
+        symmetricKey,
+        "v2.local.driRNhM20GQPvlWfJCepzh6HdijAq-yNreCcZAS0iGVlzdHjTf2ilg.Q3VvbiBBbHBpbnVz",
+        "",
+        footer,
+    );
+
+    try testV2LocalVectorT(nonce).testLocalVector(
+        nullKey,
+        "v2.local.BEsKs5AolRYDb_O-bO-lwHWUextpShFSvu6cB-KuR4wR9uDMjd45cPiOF0zxb7rrtOB5tRcS7dWsFwY4ONEuL5sWeunqHC9jxU0",
+        payload,
+        "",
+    );
+    try testV2LocalVectorT(nonce).testLocalVector(
+        fullKey,
+        "v2.local.BEsKs5AolRYDb_O-bO-lwHWUextpShFSjvSia2-chHyMi4LtHA8yFr1V7iZmKBWqzg5geEyNAAaD6xSEfxoET1xXqahe1jqmmPw",
+        payload,
+        "",
+    );
+    try testV2LocalVectorT(nonce).testLocalVector(
+        symmetricKey,
+        "v2.local.BEsKs5AolRYDb_O-bO-lwHWUextpShFSXlvv8MsrNZs3vTSnGQG4qRM9ezDl880jFwknSA6JARj2qKhDHnlSHx1GSCizfcF019U",
+        payload,
+        "",
+    );
+
+    try testV2LocalVectorT(nonce2).testLocalVector(
+        nullKey,
+        "v2.local.FGVEQLywggpvH0AzKtLXz0QRmGYuC6yvbcqXgWxM3vJGrJ9kWqquP61Xl7bz4ZEqN5XwH7xyzV0QqPIo0k52q5sWxUQ4LMBFFso.Q3VvbiBBbHBpbnVz",
+        payload,
+        footer,
+    );
+    try testV2LocalVectorT(nonce2).testLocalVector(
+        fullKey,
+        "v2.local.FGVEQLywggpvH0AzKtLXz0QRmGYuC6yvZMW3MgUMFplQXsxcNlg2RX8LzFxAqj4qa2FwgrUdH4vYAXtCFrlGiLnk-cHHOWSUSaw.Q3VvbiBBbHBpbnVz",
+        payload,
+        footer,
+    );
+    try testV2LocalVectorT(nonce2).testLocalVector(
+        symmetricKey,
+        "v2.local.FGVEQLywggpvH0AzKtLXz0QRmGYuC6yvl05z9GIX0cnol6UK94cfV77AXnShlUcNgpDR12FrQiurS8jxBRmvoIKmeMWC5wY9Y6w.Q3VvbiBBbHBpbnVz",
+        payload,
+        footer,
+    );
+}
+
+// ======================================
+
+test "V2Public EncryptDecrypt" {
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}";
+    const i = "{\"test-vector\":\"2-S-3\"}";
+
+    const alloc = testing.allocator;
+
+    const kp = paseto.Ed25519.KeyPair.generate();
+
+    var e = paseto.V2Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    const token = try e.encode(crypto.random, kp.secret_key);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V2Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, kp.public_key);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+fn testV2PublicVector(
+    secret_key: []const u8,
+    token: []const u8,
+    payload: []const u8,
+    footer: []const u8,
+) !void {
+    var buf: [64]u8 = undefined;
+    const k_bytes = try std.fmt.hexToBytes(&buf, secret_key);
+
+    var prikey_bytes: [Ed25519.SecretKey.encoded_length]u8 = undefined;
+    @memcpy(prikey_bytes[0..], k_bytes);
+
+    const prikey = try Ed25519.SecretKey.fromBytes(prikey_bytes);
+    const kp = try Ed25519.KeyPair.fromSecretKey(prikey);
+    const pubkey = kp.public_key;
+
+    // =====================
+
+    const alloc = testing.allocator;
+
+    var e = paseto.V2Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(payload);
+    try e.withFooter(footer);
+
+    const encoded = try e.encode(crypto.random, prikey);
+    defer alloc.free(encoded);
+
+    try testing.expectFmt(token, "{s}", .{encoded});
+
+    // ==================
+
+    var p = paseto.V2Public.init(alloc);
+    defer p.deinit();
+
+    try p.decode(token, pubkey);
+
+    try testing.expectFmt(payload, "{s}", .{p.message});
+}
+
+test "v2 PublicVector" {
+    try testV2PublicVector(
+        "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a37741eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2",
+        "v2.public.xnHHprS7sEyjP5vWpOvHjAP2f0HER7SWfPuehZ8QIctJRPTrlZLtRCk9_iNdugsrqJoGaO4k9cDBq3TOXu24AA",
+        "",
+        "",
+    );
+    try testV2PublicVector(
+        "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a37741eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2",
+        "v2.public.Qf-w0RdU2SDGW_awMwbfC0Alf_nd3ibUdY3HigzU7tn_4MPMYIKAJk_J_yKYltxrGlxEdrWIqyfjW81njtRyDw.Q3VvbiBBbHBpbnVz",
+        "",
+        "Cuon Alpinus",
+    );
+    try testV2PublicVector(
+        "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a37741eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2",
+        "v2.public.RnJhbmsgRGVuaXMgcm9ja3NBeHgns4TLYAoyD1OPHww0qfxHdTdzkKcyaE4_fBF2WuY1JNRW_yI8qRhZmNTaO19zRhki6YWRaKKlCZNCNrQM",
+        "Frank Denis rocks",
+        "",
+    );
+
+    try testV2PublicVector(
+        "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a37741eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2",
+        "v2.public.RnJhbmsgRGVuaXMgcm9ja3qIOKf8zCok6-B5cmV3NmGJCD6y3J8fmbFY9KHau6-e9qUICrGlWX8zLo-EqzBFIT36WovQvbQZq4j6DcVfKCML",
+        "Frank Denis rockz",
+        "",
+    );
+    try testV2PublicVector(
+        "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a37741eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2",
+        "v2.public.RnJhbmsgRGVuaXMgcm9ja3O7MPuu90WKNyvBUUhAGFmi4PiPOr2bN2ytUSU-QWlj8eNefki2MubssfN1b8figynnY0WusRPwIQ-o0HSZOS0F.Q3VvbiBBbHBpbnVz",
+        "Frank Denis rocks",
+        "Cuon Alpinus",
+    );
+
+    try testV2PublicVector(
+        "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a37741eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2",
+        "v2.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwiZXhwaXJlcyI6IjIwMTktMDEtMDFUMDA6MDA6MDArMDA6MDAifSUGY_L1YtOvo1JeNVAWQkOBILGSjtkX_9-g2pVPad7_SAyejb6Q2TDOvfCOpWYH5DaFeLOwwpTnaTXeg8YbUwI",
+        "{\"data\":\"this is a signed message\",\"expires\":\"2019-01-01T00:00:00+00:00\"}",
+        "",
+    );
+    try testV2PublicVector(
+        "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a37741eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2",
+        "v2.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwiZXhwaXJlcyI6IjIwMTktMDEtMDFUMDA6MDA6MDArMDA6MDAifcMYjoUaEYXAtzTDwlcOlxdcZWIZp8qZga3jFS8JwdEjEvurZhs6AmTU3bRW5pB9fOQwm43rzmibZXcAkQ4AzQs.UGFyYWdvbiBJbml0aWF0aXZlIEVudGVycHJpc2Vz",
+        "{\"data\":\"this is a signed message\",\"expires\":\"2019-01-01T00:00:00+00:00\"}",
+        "Paragon Initiative Enterprises",
+    );
+}
+
+test "V2Public EncryptDecrypt with der key" {
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}";
+    const i = "{\"test-vector\":\"2-S-3\"}";
+
+    const alloc = testing.allocator;
+
+    const prikey = "MC4CAQAwBQYDK2VwBCIEIE7YvvGJzvKQ3uZOQ6qAPkRsK7nkpmjPOaqsZKqrFQMw";
+    const pubkey = "MCowBQYDK2VwAyEAgbbl7UO5W8ZMmOm+Kw9X2y9PyblBTDcZIRaR/kDFoA0=";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
+
+    const secret_key = try paseto.parser.ParseEddsaDer.parseSecretKeyDer(prikey_bytes);
+    const public_key = try paseto.parser.ParseEddsaDer.parsePublicKeyDer(pubkey_bytes);
+
+    var e = paseto.V2Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    const token = try e.encode(crypto.random, secret_key);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V2Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, public_key);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+// ======================================
+
+test "V1Local EncryptDecrypt" {
+    const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
+
+    var buf: [32]u8 = undefined;
+    const k = try std.fmt.hexToBytes(&buf, key);
+
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}";
+    const i = "{\"test-vector\":\"2-E-3\"}";
+
+    const alloc = testing.allocator;
+
+    var e = paseto.V1Local.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    const token = try e.encode(crypto.random, k);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V1Local.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, k);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+fn testV1LocalVectorT(comptime nonce: []const u8) type {
+    return struct {
+        fn testLocalVector(
+            key: []const u8,
+            token: []const u8,
+            payload: []const u8,
+            footer: []const u8,
+        ) !void {
+            var buf: [32]u8 = undefined;
+            const k = try std.fmt.hexToBytes(&buf, key);
+
+            const test_rng: std.Random = .{
+                .ptr = undefined,
+                .fillFn = TestRNG(nonce).fill,
+            };
+
+            const alloc = testing.allocator;
+
+            var e = paseto.V1Local.init(alloc);
+            defer e.deinit();
+
+            try e.withMessage(payload);
+            try e.withFooter(footer);
+
+            const encoded = try e.encode(test_rng, k);
+            defer alloc.free(encoded);
+
+            try testing.expectFmt(token, "{s}", .{encoded});
+
+            // ==================
+
+            var p = paseto.V1Local.init(alloc);
+            defer p.deinit();
+
+            try p.decode(token, k);
+
+            try testing.expectFmt(payload, "{s}", .{p.message});
+        }
+    };
+}
+
+test "v1 LocalVector" {
+    const nullKey = "0000000000000000000000000000000000000000000000000000000000000000";
+    const fullKey = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+    const symmetricKey = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
+
+    const nonce = "0000000000000000000000000000000000000000000000000000000000000000";
+    const nonce2 = "26f7553354482a1d91d4784627854b8da6b8042a7966523c2b404e8dbbe7f7f2";
+
+    const footer = "Cuon Alpinus";
+    const payload = "Love is stronger than hate or fear";
+
+    try testV1LocalVectorT(nonce).testLocalVector(
+        nullKey,
+        "v1.local.bB8u6Tj60uJL2RKYR0OCyiGMdds9g-EUs9Q2d3bRTTXyNMehtdOLJS_vq4YzYdaZ6vwItmpjx-Lt3AtVanBmiMyzFyqJMHCaWVMpEMUyxUg",
+        "",
+        "",
+    );
+    try testV1LocalVectorT(nonce).testLocalVector(
+        fullKey,
+        "v1.local.bB8u6Tj60uJL2RKYR0OCyiGMdds9g-EUs9Q2d3bRTTWgetvu2STfe7gxkDpAOk_IXGmBeea4tGW6HsoH12oKElAWap57-PQMopNurtEoEdk",
+        "",
+        "",
+    );
+    try testV1LocalVectorT(nonce).testLocalVector(
+        symmetricKey,
+        "v1.local.bB8u6Tj60uJL2RKYR0OCyiGMdds9g-EUs9Q2d3bRTTV8OmiMvoZgzer20TE8kb3R0QN9Ay-ICSkDD1-UDznTCdBiHX1fbb53wdB5ng9nCDY",
+        "",
+        "",
+    );
+
+    try testV1LocalVectorT(nonce).testLocalVector(
+        nullKey,
+        "v1.local.bB8u6Tj60uJL2RKYR0OCyiGMdds9g-EUs9Q2d3bRTTVhyXOB4vmrFm9GvbJdMZGArV5_10Kxwlv4qSb-MjRGgFzPg00-T2TCFdmc9BMvJAA.Q3VvbiBBbHBpbnVz",
+        "",
+        footer,
+    );
+    try testV1LocalVectorT(nonce).testLocalVector(
+        fullKey,
+        "v1.local.bB8u6Tj60uJL2RKYR0OCyiGMdds9g-EUs9Q2d3bRTTVna3s7WqUwfQaVM8ddnvjPkrWkYRquX58-_RgRQTnHn7hwGJwKT3H23ZDlioSiJeo.Q3VvbiBBbHBpbnVz",
+        "",
+        footer,
+    );
+    try testV1LocalVectorT(nonce).testLocalVector(
+        symmetricKey,
+        "v1.local.bB8u6Tj60uJL2RKYR0OCyiGMdds9g-EUs9Q2d3bRTTW9MRfGNyfC8vRpl8xsgnsWt-zHinI9bxLIVF0c6INWOv0_KYIYEaZjrtumY8cyo7M.Q3VvbiBBbHBpbnVz",
+        "",
+        footer,
+    );
+
+    try testV1LocalVectorT(nonce).testLocalVector(
+        nullKey,
+        "v1.local.N9n3wL3RJUckyWdg4kABZeMwaAfzNT3B64lhyx7QA45LtwQCqG8LYmNfBHIX-4Uxfm8KzaYAUUHqkxxv17MFxsEvk-Ex67g9P-z7EBFW09xxSt21Xm1ELB6pxErl4RE1gGtgvAm9tl3rW2-oy6qHlYx2",
+        payload,
+        "",
+    );
+    try testV1LocalVectorT(nonce).testLocalVector(
+        fullKey,
+        "v1.local.N9n3wL3RJUckyWdg4kABZeMwaAfzNT3B64lhyx7QA47lQ79wMmeM7sC4c0-BnsXzIteEQQBQpu_FyMznRnzYg4gN-6Kt50rXUxgPPfwDpOr3lUb5U16RzIGrMNemKy0gRhfKvAh1b8N57NKk93pZLpEz",
+        payload,
+        "",
+    );
+    try testV1LocalVectorT(nonce).testLocalVector(
+        symmetricKey,
+        "v1.local.N9n3wL3RJUckyWdg4kABZeMwaAfzNT3B64lhyx7QA47hvAicYf1zfZrxPrLeBFdbEKO3JRQdn3gjqVEkR1aXXttscmmZ6t48tfuuudETldFD_xbqID74_TIDO1JxDy7OFgYI_PehxzcapQ8t040Fgj9k",
+        payload,
+        "",
+    );
+
+    try testV1LocalVectorT(nonce2).testLocalVector(
+        nullKey,
+        "v1.local.rElw-WywOuwAqKC9Yao3YokSp7vx0YiUB9hLTnsVOYbivwqsESBnr82_ZoMFFGzolJ6kpkOihkulB4K_JhfMHoFw4E9yCR6ltWX3e9MTNSud8mpBzZiwNXNbgXBLxF_Igb5Ixo_feIonmCucOXDlLVUT.Q3VvbiBBbHBpbnVz",
+        payload,
+        footer,
+    );
+    try testV1LocalVectorT(nonce2).testLocalVector(
+        fullKey,
+        "v1.local.rElw-WywOuwAqKC9Yao3YokSp7vx0YiUB9hLTnsVOYZ8rQTA12SNb9cY8jVtVyikY2jj_tEBzY5O7GJsxb5MdQ6cMSnDz2uJGV20vhzVDgvkjdEcN9D44VaHid26qy1_1YlHjU6pmyTmJt8WT21LqzDl.Q3VvbiBBbHBpbnVz",
+        payload,
+        footer,
+    );
+    try testV1LocalVectorT(nonce2).testLocalVector(
+        symmetricKey,
+        "v1.local.rElw-WywOuwAqKC9Yao3YokSp7vx0YiUB9hLTnsVOYYTojmVaYumJSQt8aggtCaFKWyaodw5k-CUWhYKATopiabAl4OAmTxHCfm2E4NSPvrmMcmi8n-JcZ93HpcxC6rx_ps22vutv7iP7wf8QcSD1Mwx.Q3VvbiBBbHBpbnVz",
+        payload,
+        footer,
+    );
+}
+
+// ======================================
+
+test "V1Public EncryptDecrypt" {
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}";
+    const i = "{\"test-vector\":\"2-S-3\"}";
+
+    const alloc = testing.allocator;
+
+    const prikey = "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq";
+    const pubkey = "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB";
+
+    const prikey_bytes = try utils.base64Decode(alloc, prikey);
+    const pubkey_bytes = try utils.base64Decode(alloc, pubkey);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
+
+    const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
+    const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
+
+    var e = paseto.V1Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    const token = try e.encode(crypto.random, secret_key);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V1Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, public_key);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+fn testV1PublicVector(
+    secret_key: []const u8,
+    public_key: []const u8,
+    token: []const u8,
+    payload: []const u8,
+    footer: []const u8,
+) !void {
+    const alloc = testing.allocator;
+
+    const prikey_bytes = try utils.base64Decode(alloc, secret_key);
+    const pubkey_bytes = try utils.base64Decode(alloc, public_key);
+
+    defer alloc.free(prikey_bytes);
+    defer alloc.free(pubkey_bytes);
+
+    const prikey = try rsa.SecretKey.fromDer(prikey_bytes);
+    const pubkey = try rsa.PublicKey.fromDer(pubkey_bytes);
+
+    // =====================
+
+    var e = paseto.V1Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(payload);
+    try e.withFooter(footer);
+
+    const encoded = try e.encode(crypto.random, prikey);
+    defer alloc.free(encoded);
+
+    try testing.expectEqual(true, encoded.len > 0);
+
+    // ==================
+
+    var p = paseto.V1Public.init(alloc);
+    defer p.deinit();
+
+    try p.decode(token, pubkey);
+
+    try testing.expectFmt(payload, "{s}", .{p.message});
+}
+
+test "v1 PublicVector" {
+    try testV1PublicVector(
+        "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq",
+        "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB",
+        "v1.public.UviYCKjE-iZqO16AMiXpH2JBmGqLZHco7ynTzr2magU5krprDDGa5Vy09_qrAnnQFSf5Qnwuos5W5e_fuLvVDxMO0WS0fQP_PfLrDBYf65FqGjBZ9SUdlHhEj5dqe1GNjDyawxqhRnGUb1WRBIfz8VhMEaPhW5NEayQ4sG0fO6pnTvOzSPnpCNGDGDvVE-Wmmv-_iyMHJCARZfW3TEYjasebte-AUXIYriREkJo9JjAELrKSUSIv5trGpRM0aI5h_WmYVYrg2SXmw61OKLxIU3un8dQNDFHCttBQ4Ak85RWTVhE6renMB7S5ONuTIRi7WNbloAGp9LimB0hCSvWx2g",
+        "",
+        "",
+    );
+    try testV1PublicVector(
+        "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq",
+        "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB",
+        "v1.public.LtgW3XEzPD8Td2T4zP-5yJGFEG0OwpOUMoLa6z33dsiqpYm5r2gls8K89sMOXhOq3rhLXwtDsMYLmmGIFrIb5s7hkkQhuRpwWf3jfq_KkGWVOpCGKNI833R2hQJAaVTAFHgkdGjvAAG86OeAPKzZ7Jp3R_dVCqKDEIO8Wgj-B3c14LSqOCE4YR9QgyhHo9r9DWfH1RnrxMrLikj7j9_fVF5YKpA4x2vI9dJlPsfGmq93qVEXhS1JEWM7Vp6iPP17yQJWbOxygwLgH8TTcyumvkFHiUWFyBn2lW1ZvhXimxvbTQo0iic2EWRc9eAqbND-jT2NvX0W0jnFjFW0-mgwbA.Q3VvbiBBbHBpbnVz",
+        "",
+        "Cuon Alpinus",
+    );
+    try testV1PublicVector(
+        "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq",
+        "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB",
+        "v1.public.RnJhbmsgRGVuaXMgcm9ja3PX5Y2ivH2g_-cdPy3FKSItJDFTtQ7biFpW8WTxXSxCNlXXR0pZXrVYRKtbML9XPxXCoXla00wsjHu_jEuB0frLPzeI5QShBsItFJwNttBN_8gwTmP6x2cihHTNpUozLquP9x_oihYsWZ_FghR6DKIcFfC3iNGtDpREV7cZtO4Yjdxdu2HvYf3mwt1KMRcwxFglKkBTD7O1ZJmfywCDJl0E2pHKWhpCAXC00mbiawsuUhDHxjL80FkW4JAXUXrW8BD3mR1gbSgHKfxGbNr_b7KphkFWjhJPwTem_uzdLkjsApb36KYVhlpyqNtG4nisuEi9ezvNshqmOjGtmZCdwhlz",
+        "Frank Denis rocks",
+        "",
+    );
+
+    try testV1PublicVector(
+        "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq",
+        "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB",
+        "v1.public.RnJhbmsgRGVuaXMgcm9ja3qbyJ_sqh6c-4Ha_tZQ876EeKl1Ux9YYVKytcqLzc9AB6sNWXsXSAm_B7eM2okyjJVR1pKmuEWP2Rt__bSY3ureWBOaNSJZoBzVH7qaq_SP7eAbh8exH2Bmaw2rhdjeXmwhPrXsfUQwV-UG2CMnjcLPwTW6OtRU9Zr3Md0jyZRK8YCsIyu4sAmB5befIetswFNJVuQ5GW69dLa_R-hCmVH510tpK8O-42hKp_smBWZlyX1w7Wcj5YeNzpj2kYQYeUbmSkhY0gwN5ckI5sK9gFAuH7kYajcbFMLf3tbJzNnemzgBZl43g9v3KFPwdq-pq3jhrj14bVqtydaO5jU0luvx",
+        "Frank Denis rockz",
+        "",
+    );
+    try testV1PublicVector(
+        "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq",
+        "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB",
+        "v1.public.RnJhbmsgRGVuaXMgcm9ja3M_dM236YO68eRSQsiABNRZ9B5QD4UrNZo0iQDohVvN8eWV9ZZKQ7m9rHfoRPrVeanLsgiCuiUr1z_Qxoa8OGTFWm2hhG9SKX8Pnt8WTeciUJt0Yf-_0KqipfPjWe74ZQTsNjU9z1HXMbqckOkgRIRbeSnrr5QjfRNo7u52WsJfE_pugcTZD96Yuby9fP5IT3qSW3GvsAcR3IJ6PQCGV7YizVLFX8PoSGRr3BD-l7eF4XadUjKfygqjxY56F9WD5vs-SWzSAaeYnGlMhmZpL-2JKNi44V2xAo6xwCtxNGvsdzozk1F8e4ZQidqGnDu8TrFxpHIkOA15NGLT6Mw6IO_c.Q3VvbiBBbHBpbnVz",
+        "Frank Denis rocks",
+        "Cuon Alpinus",
+    );
+
+    try testV1PublicVector(
+        "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq",
+        "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB",
+        "v1.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwiZXhwaXJlcyI6IjIwMTktMDEtMDFUMDA6MDA6MDArMDA6MDAifS6xZDRJfuOVZRc09QLd7sQ9h_I-pCvxLc6mBSwr2ZJHLhk8u8mhjrqAeUvYU0LaOthiXqfLurv-6-h4gap0VblMooVNBqNSHr8sKH6qAJupGYiRJFrrCsWBtDKhvwgj2s7CETGlm3Lm8DpbR--sYGYZNK8wkSCxFNz-lLVeUePwSO2JRXImtkZ4TcHedK6-BRgspEsThDkP0fqKfqfLfpShyS1VYVUqtyDxZd25YEBi0FLAPxeB1sSAYLtqkMLe2gWmmCbSdCS2t478imrJ_5RrZ3nv3Za145zFmFC0yuMrrYqvYGtWG1DhjCL8W9Z1pmgWKPwhrorc8cxIMzzsrHc",
+        "{\"data\":\"this is a signed message\",\"expires\":\"2019-01-01T00:00:00+00:00\"}",
+        "",
+    );
+    try testV1PublicVector(
+        "MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAoIBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReFMRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrHzOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgvlnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLSslHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOSf/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbBULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJA7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq",
+        "MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB",
+        "v1.public.eyJkYXRhIjoidGhpcyBpcyBhIHNpZ25lZCBtZXNzYWdlIiwiZXhwaXJlcyI6IjIwMTktMDEtMDFUMDA6MDA6MDArMDA6MDAifbxBICrgInL7N0u-SoHZnWppFjDJFj7NHTxwiSAONyGXfqVsRMzKKvcjBnaC2j1hxNj7dY8nVIUvDa7QbHpeie8XRGEuNFola-DOBceFLuFlHHAM8MbSe1WyeEkUkSO5xFtj-B6U-APU3E7-GIuVsdJ3Pjv3nZTvvYdx-SQl91feh9g_mSYeEFb1aUPGmtMvPurggZsmKi-IeqnC8fDPtfnmf_x96mPShuLLxgRFEocQ1IZ-Qstsvz_KrRGlHFcIHXjsb50E_tU8Cuo4kp-PAukf2Q4tVokQMYL_eF4CfPCZt88lOV8dXc6cRpDhpPXQv8o2aWHv-Riw1Zncowcbii8.UGFyYWdvbiBJbml0aWF0aXZlIEVudGVycHJpc2Vz",
+        "{\"data\":\"this is a signed message\",\"expires\":\"2019-01-01T00:00:00+00:00\"}",
+        "Paragon Initiative Enterprises",
     );
 }
