@@ -67,7 +67,7 @@ pub fn ParseEcdsaKeyDer(comptime EC: type, comptime CheckOidFn: type) type {
 
             const version = try parser.expectInt(u8);
             if (version != 0) {
-                return error.JWTEcdsaPKCS8VersionError;
+                return error.PasetoEcdsaPKCS8VersionError;
             }
 
             const oid_seq = try parser.expectSequence();
@@ -97,7 +97,7 @@ pub fn ParseEcdsaKeyDer(comptime EC: type, comptime CheckOidFn: type) type {
 
             const version = try parser.expectInt(u8);
             if (version != 1) {
-                return error.JWTEcdsaECVersionError;
+                return error.PasetoEcdsaECVersionError;
             }
 
             const prikey_octet = try parser.expect(.universal, false, .octetstring);
@@ -109,7 +109,7 @@ pub fn ParseEcdsaKeyDer(comptime EC: type, comptime CheckOidFn: type) type {
             } else {
                 const oid_seq = try parser.expect(.context_specific, true, null);
                 if (@intFromEnum(oid_seq.identifier.tag) != 0) {
-                    return error.JWTEcdsaOidTagError;
+                    return error.PasetoEcdsaOidTagError;
                 }
                 namedcurve_oid = parser.expectOid() catch "";
             }
@@ -131,7 +131,7 @@ fn checkECDSAPublickeyOid(oid: []const u8) !void {
 
     const oid_string = stream.buffered();
     if (!std.mem.eql(u8, oid_string, oid_ecdsa_publickey)) {
-        return error.JWTEcdsaOidError;
+        return error.PasetoEcdsaOidError;
     }
 
     return;
@@ -144,7 +144,7 @@ fn checkECDSAPublickeyNamedCurveOid(oid: []const u8, namedcurve_oid: []const u8)
 
     const oid_string = stream.buffered();
     if (!std.mem.eql(u8, oid_string, namedcurve_oid)) {
-        return error.JWTEcdsaNamedCurveNotSupport;
+        return error.PasetoEcdsaNamedCurveNotSupport;
     }
 
     return;
@@ -167,7 +167,7 @@ pub fn ParseEdDSAKeyDer(comptime ED: type) type {
 
             const version = try parser.expectInt(u8);
             if (version != 0) {
-                return error.JWTEdDSAPKCS8VersionError;
+                return error.PasetoEdDSAPKCS8VersionError;
             }
 
             const oid_seq = try parser.expectSequence();
@@ -183,7 +183,7 @@ pub fn ParseEdDSAKeyDer(comptime ED: type) type {
 
             const parse_prikey_bytes = prikey_parser.view(prikey);
             if (parse_prikey_bytes.len != ED.KeyPair.seed_length) {
-                return error.JWTEdDSASecretKeyBytesLengthError;
+                return error.PasetoEdDSASecretKeyBytesLengthError;
             }
 
             var seed: [ED.KeyPair.seed_length]u8 = undefined;
@@ -207,7 +207,7 @@ pub fn ParseEdDSAKeyDer(comptime ED: type) type {
             const pubkey = try parser.expectBitstring();
 
             if (pubkey.bytes.len != ED.PublicKey.encoded_length) {
-                return error.JWTEdDSAPublicKeyBytesLengthError;
+                return error.PasetoEdDSAPublicKeyBytesLengthError;
             }
 
             var pubkey_bytes: [ED.PublicKey.encoded_length]u8 = undefined;
@@ -225,7 +225,7 @@ fn checkEdDSAPublickeyOid(oid: []const u8) !void {
 
     const oid_string = stream.buffered();
     if (!std.mem.eql(u8, oid_string, oid_eddsa_publickey)) {
-        return error.JWTEdDSAOidError;
+        return error.PasetoEdDSAOidError;
     }
 
     return;
