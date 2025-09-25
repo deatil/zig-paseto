@@ -115,21 +115,6 @@ pub fn EncodeV2Local(comptime name: []const u8) type {
     };
 }
 
-pub fn TestRNG(comptime buf: []const u8) type {
-    return struct {
-        fn fill(_: *anyopaque, buffer: []u8) void {
-            var buf2: [32]u8 = undefined;
-            const buf3 = std.fmt.hexToBytes(&buf2, buf) catch "";
-
-            if (buffer.len < buf3.len) {
-                @memcpy(buffer[0..], buf3[0..buffer.len]);
-            } else {
-                @memcpy(buffer[0..buf3.len], buf3[0..]);
-            }
-        }
-    };
-}
-
 test "V2Local EncryptDecrypt" {
     const alloc = testing.allocator;
     const e = V2Local.init(alloc);
@@ -191,7 +176,7 @@ test "V2Local Decrypt check 2" {
 
     const test_rng: std.Random = .{
         .ptr = undefined,
-        .fillFn = TestRNG(nonce).fill,
+        .fillFn = utils.TestRNG(nonce).fill,
     };
 
     const alloc = testing.allocator;

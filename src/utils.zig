@@ -95,6 +95,21 @@ pub fn pre_auth_encoding(alloc: Allocator, pieces: []const []const u8) ![]u8 {
     return output;
 }
 
+pub fn TestRNG(comptime buf: []const u8) type {
+    return struct {
+        pub fn fill(_: *anyopaque, buffer: []u8) void {
+            var buf2: [32]u8 = undefined;
+            const buf3 = std.fmt.hexToBytes(&buf2, buf) catch "";
+
+            if (buffer.len < buf3.len) {
+                @memcpy(buffer[0..], buf3[0..buffer.len]);
+            } else {
+                @memcpy(buffer[0..buf3.len], buf3[0..]);
+            }
+        }
+    };
+}
+
 test "base64UrlEncode" {
     const alloc = testing.allocator;
 
@@ -155,4 +170,16 @@ test "pre_auth_encoding" {
         //}, str);
         try testing.expectFmt("0100000000000000040000000000000074657374", "{x}", .{str});
     }
+}
+
+test "TestRNG" {
+    const test_rng: std.Random = .{
+        .ptr = undefined,
+        .fillFn = TestRNG("707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f").fill,
+    };
+
+    var buf: [5]u8 = undefined;
+    test_rng.bytes(&buf);
+
+    try testing.expectFmt("7071727374", "{x}", .{buf[0..]});
 }

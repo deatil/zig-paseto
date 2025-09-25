@@ -61,6 +61,8 @@ const paseto = @import("zig-paseto");
 
 ~~~zig
 const std = @import("std");
+const crypto = std.crypto;
+
 const paseto = @import("zig-paseto");
 
 pub fn main() !void {
@@ -86,8 +88,8 @@ pub fn main() !void {
     defer alloc.free(token);
     
     // output: 
-    // make paseto jwt: v4.local.G-ToOUO6A-LGTVrBKiVn7najk-XOBR2a4olurkkWrLgM9sKOf6tNlMpKbSZpI70E5MzgdnWq6yplehnR2VeLR4VTmGMZYDI0VMotPJpKJeBuS7xDoCsm8z_5wA9af2ZtTfrlMY5ErELyiqx5pqdVAzSBP9ZM6-Qxo4oHTnWAqjENeOHdYA.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9lQTlDT2NOeTlEZmdMMVc2MGhhTiJ9
-    std.debug.print("make paseto jwt: {s} \n", .{token_string});
+    // make paseto token: v4.local.G-ToOUO6A-LGTVrBKiVn7najk-XOBR2a4olurkkWrLgM9sKOf6tNlMpKbSZpI70E5MzgdnWq6yplehnR2VeLR4VTmGMZYDI0VMotPJpKJeBuS7xDoCsm8z_5wA9af2ZtTfrlMY5ErELyiqx5pqdVAzSBP9ZM6-Qxo4oHTnWAqjENeOHdYA.eyJraWQiOiJ6VmhNaVBCUDlmUmYyc25FY1Q3Z0ZUaW9lQTlDT2NOeTlEZmdMMVc2MGhhTiJ9
+    std.debug.print("make paseto token: {s} \n", .{token});
 
     // ====================
 
@@ -103,14 +105,14 @@ pub fn main() !void {
     // message: this is a signed message
     const message = try p.getMessage();
     defer message.deinit();
-    std.debug.print("message: {s} \n", .{g_m.value.object.get("data").?.string});
+    std.debug.print("message: {s} \n", .{message.value.object.get("data").?.string});
 }
 ~~~
 
 
 ### Encode Methods
 
-The Paseto library have Encode methods:
+The PASETO library have encode methods:
 
  - `v1.local`: paseto.V1Local
  - `v1.public`: paseto.V1Public
