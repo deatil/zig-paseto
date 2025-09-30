@@ -37,36 +37,36 @@ pub fn EncodeV2Local(comptime name: []const u8) type {
             _ = i;
 
             // Create random seed
-            var nonce: [24]u8 = undefined;
-            r.bytes(&nonce);
+            var rand_nonce: [24]u8 = undefined;
+            r.bytes(&rand_nonce);
 
-            const n = v2.mac(nonce[0..], msg[0..]);
+            const nonce = v2.mac(rand_nonce[0..], msg[0..]);
 
             const tag_len = XChaCha20Poly1305.tag_length;
             const nonce_length = XChaCha20Poly1305.nonce_length;
 
             const ciphertext_len = msg.len + tag_len;
 
-            // Encrypt the payload
             var ciphertext = try self.alloc.alloc(u8, ciphertext_len);
             defer self.alloc.free(ciphertext);
 
-            const m2 = try utils.pre_auth_encoding(self.alloc, &[_][]const u8{ local_prefix, n[0..], f });
+            const m2 = try utils.pre_auth_encoding(self.alloc, &[_][]const u8{ local_prefix, nonce[0..], f });
             defer self.alloc.free(m2);
 
+            // Encrypt the payload
             XChaCha20Poly1305.encrypt(
                 ciphertext[0..msg.len],
                 ciphertext[msg.len..][0..tag_len],
                 msg,
                 m2,
-                n[0..nonce_length].*,
+                nonce[0..nonce_length].*,
                 key[0..32].*,
             );
 
             // Combine nonce + ciphertext for base64 encoding
-            var out = try self.alloc.alloc(u8, n.len + ciphertext_len);
-            @memcpy(out[0..n.len], n[0..]);
-            @memcpy(out[n.len..][0..ciphertext_len], ciphertext);
+            var out = try self.alloc.alloc(u8, nonce.len + ciphertext_len);
+            @memcpy(out[0..nonce.len], nonce[0..]);
+            @memcpy(out[nonce.len..][0..ciphertext_len], ciphertext);
 
             return out;
         }

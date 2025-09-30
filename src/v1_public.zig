@@ -48,7 +48,7 @@ pub fn EncodeV1Public(comptime name: []const u8) type {
 
             const signed = sig.toBytes();
 
-            // Prepare content
+            // Combine message + sign
             var out = try self.alloc.alloc(u8, msg.len + signed.len);
             @memcpy(out[0..msg.len], msg[0..]);
             @memcpy(out[msg.len..][0..signed.len], signed[0..]);

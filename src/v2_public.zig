@@ -44,7 +44,7 @@ pub fn EncodeV2Public(comptime name: []const u8) type {
             const sig = try secret_key.sign(m2[0..], null);
             var siged = sig.toBytes();
 
-            // Prepare content
+            // Combine msg + sign for base64 encoding
             var out = try self.alloc.alloc(u8, msg.len + encoded_length);
             @memcpy(out[0..msg.len], msg[0..]);
             @memcpy(out[msg.len..][0..siged.len], siged[0..]);

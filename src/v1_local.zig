@@ -37,28 +37,28 @@ pub fn EncodeV1Local(comptime name: []const u8) type {
             }
 
             // Create random seed
-            var nonce: [32]u8 = undefined;
-            r.bytes(&nonce);
+            var rand_nonce: [32]u8 = undefined;
+            r.bytes(&rand_nonce);
 
-            const n2 = v1.hmac(nonce[0..], msg);
+            const nonce = v1.hmac(rand_nonce[0..], msg);
 
-            const kdf_res = try v1.kdf(key[0..], n2[0..16]);
+            const kdf_res = try v1.kdf(key[0..], nonce[0..16]);
 
-            // Encrypt the payload
             var ciphertext = try self.alloc.alloc(u8, msg.len);
             defer self.alloc.free(ciphertext);
 
+            // Encrypt the payload
             // Use an AES-256-CTR stream cipher
             const ctx = aes.Aes256.initEnc(kdf_res.ek[0..].*);
-            modes.ctr(aes.AesEncryptCtx(aes.Aes256), ctx, ciphertext[0..], msg[0..], n2[16..].*, std.builtin.Endian.big);
+            modes.ctr(aes.AesEncryptCtx(aes.Aes256), ctx, ciphertext[0..], msg[0..], nonce[16..].*, std.builtin.Endian.big);
 
-            const t = try v1.mac(self.alloc, kdf_res.ak[0..], local_prefix, n2[0..], ciphertext, f);
+            const t = try v1.mac(self.alloc, kdf_res.ak[0..], local_prefix, nonce[0..], ciphertext, f);
 
             // Combine nonce + ciphertext + t for base64 encoding
-            var out = try self.alloc.alloc(u8, n2.len + msg.len + t.len);
-            @memcpy(out[0..n2.len], n2[0..]);
-            @memcpy(out[n2.len..][0..msg.len], ciphertext);
-            @memcpy(out[n2.len + msg.len ..][0..t.len], t[0..]);
+            var out = try self.alloc.alloc(u8, nonce.len + msg.len + t.len);
+            @memcpy(out[0..nonce.len], nonce[0..]);
+            @memcpy(out[nonce.len..][0..msg.len], ciphertext);
+            @memcpy(out[nonce.len + msg.len ..][0..t.len], t[0..]);
 
             return out;
         }
@@ -89,8 +89,8 @@ pub fn EncodeV1Local(comptime name: []const u8) type {
             var out = try self.alloc.alloc(u8, c.len);
             errdefer self.alloc.free(out);
 
-            // Use an AES-256-CTR stream cipher
             // Decrypt the payload
+            // Use an AES-256-CTR stream cipher
             const ctx = aes.Aes256.initEnc(kdf_res.ek[0..].*);
             modes.ctr(aes.AesEncryptCtx(aes.Aes256), ctx, out[0..], c[0..], n[16..].*, std.builtin.Endian.big);
 

@@ -38,12 +38,12 @@ pub fn EncodeV3Local(comptime name: []const u8) type {
             var nonce: [32]u8 = undefined;
             r.bytes(&nonce);
 
-            // Encrypt the payload
             var ciphertext = try self.alloc.alloc(u8, msg.len);
             defer self.alloc.free(ciphertext);
 
             const kdf_res = try v3.kdf(self.alloc, key[0..], nonce[0..]);
 
+            // Encrypt the payload
             // Use an AES-256-CTR stream cipher
             const ctx = aes.Aes256.initEnc(kdf_res.ek[0..].*);
             modes.ctr(aes.AesEncryptCtx(aes.Aes256), ctx, ciphertext[0..], msg[0..], kdf_res.n2[0..].*, std.builtin.Endian.big);
@@ -79,8 +79,8 @@ pub fn EncodeV3Local(comptime name: []const u8) type {
             var out = try self.alloc.alloc(u8, c.len);
             errdefer self.alloc.free(out);
 
-            // Use an AES-256-CTR stream cipher
             // Decrypt the payload
+            // Use an AES-256-CTR stream cipher
             const ctx = aes.Aes256.initEnc(kdf_res.ek[0..].*);
             modes.ctr(aes.AesEncryptCtx(aes.Aes256), ctx, out[0..], c[0..], kdf_res.n2[0..].*, std.builtin.Endian.big);
 
