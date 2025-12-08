@@ -10,6 +10,7 @@ pub const rsa = @import("rsa/rsa.zig");
 pub const parser = @import("parser.zig");
 pub const utils = @import("utils.zig");
 pub const Token = @import("token.zig").Token;
+pub const Validator = @import("validator.zig").Validator;
 
 pub const v1 = @import("v1.zig");
 pub const v1_local = @import("v1_local.zig");

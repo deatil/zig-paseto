@@ -1,4 +1,5 @@
 const std = @import("std");
+const time = std.time;
 const testing = std.testing;
 const crypto = std.crypto;
 const Ed25519 = std.crypto.sign.Ed25519;
@@ -1520,4 +1521,53 @@ test "v1 PublicVector" {
         "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}",
         // "discarded-anyway",
     );
+}
+
+// ======================================
+
+test "Validator" {
+    const alloc = testing.allocator;
+
+    const check1 = "eyJpc3MiOiJpc3MiLCJpYXQiOjE1Njc4NDIzODgsImV4cCI6MTc2Nzg0MjM4OCwiYXVkIjoiZXhhbXBsZS5jb20iLCJzdWIiOiJzdWIiLCJqdGkiOiJqdGkgcnJyIiwibmJmIjoxNTY3ODQyMzg4fQ";
+    const now = time.timestamp();
+
+    const msg = try utils.base64UrlDecode(alloc, check1);
+    defer alloc.free(msg);
+
+    const msg_json = try utils.jsonDecode(alloc, msg);
+    defer msg_json.deinit();
+
+    var validator = try paseto.Validator.init(msg_json, .{});
+    // defer validator.deinit();
+
+    try testing.expectEqual(true, validator.hasBeenIssuedBy("iss"));
+    try testing.expectEqual(true, validator.isRelatedTo("sub"));
+    try testing.expectEqual(true, validator.isIdentifiedBy("jti rrr"));
+    try testing.expectEqual(true, validator.isPermittedFor("example.com"));
+    try testing.expectEqual(true, validator.hasBeenIssuedBefore(now));
+    try testing.expectEqual(false, validator.isExpired(now));
+
+    try testing.expectEqual(true, msg_json.value.object.get("nbf").?.integer > 0);
+
+    try testing.expectEqual(1567842388, msg_json.value.object.get("iat").?.integer);
+    try testing.expectEqual(1767842388, msg_json.value.object.get("exp").?.integer);
+    try testing.expectEqual(1567842388, msg_json.value.object.get("nbf").?.integer);
+
+    try testing.expectEqual(true, validator.hasBeenIssuedBefore(1567842389));
+    try testing.expectEqual(true, validator.isMinimumTimeBefore(1567842389));
+    try testing.expectEqual(true, validator.isExpired(1767842389));
+
+    // ======
+
+    var validator2 = try paseto.Validator.init(msg_json, .{});
+    // defer validator2.deinit();
+
+    validator2.withLeeway(3);
+
+    try testing.expectEqual(true, validator2.hasBeenIssuedBefore(1567842391));
+    try testing.expectEqual(false, validator2.hasBeenIssuedBefore(1567842384));
+    try testing.expectEqual(true, validator2.isMinimumTimeBefore(1567842391));
+    try testing.expectEqual(false, validator2.isMinimumTimeBefore(1567842384));
+    try testing.expectEqual(true, validator2.isExpired(1767842392));
+    try testing.expectEqual(false, validator2.isExpired(1767842389));
 }
