@@ -178,8 +178,33 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
 
             return t;
         }
+
+        // validator message
+        pub fn validator(self: *Self) !Validator {
+            const msg = try self.getMessage();
+
+            return Validator.init(msg, .{});
+        }
     };
 }
+
+// jwt claims struct
+pub const JWTClaims = struct {
+    // Issuer
+    iss: ?[]const u8 = null,
+    // Issued At
+    iat: ?i64 = null,
+    // Expiration Time
+    exp: ?i64 = null,
+    // Audience
+    aud: ?[]const u8 = null,
+    // Subject
+    sub: ?[]const u8 = null,
+    // JWT ID
+    jti: ?[]const u8 = null,
+    // Not Before
+    nbf: ?i64 = null,
+};
 
 test {
     _ = @import("paseto_test.zig");

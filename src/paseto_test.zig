@@ -1537,7 +1537,7 @@ test "Validator" {
     const msg_json = try utils.jsonDecode(alloc, msg);
     defer msg_json.deinit();
 
-    var validator = try paseto.Validator.init(msg_json, .{});
+    var validator = paseto.Validator.init(msg_json, .{});
     // defer validator.deinit();
 
     try testing.expectEqual(true, validator.hasBeenIssuedBy("iss"));
@@ -1559,7 +1559,7 @@ test "Validator" {
 
     // ======
 
-    var validator2 = try paseto.Validator.init(msg_json, .{});
+    var validator2 = paseto.Validator.init(msg_json, .{});
     // defer validator2.deinit();
 
     validator2.withLeeway(3);
@@ -1570,4 +1570,68 @@ test "Validator" {
     try testing.expectEqual(false, validator2.isMinimumTimeBefore(1567842384));
     try testing.expectEqual(true, validator2.isExpired(1767842392));
     try testing.expectEqual(false, validator2.isExpired(1767842389));
+}
+
+test "V2Local Validator" {
+    const alloc = testing.allocator;
+
+    const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
+
+    var buf: [32]u8 = undefined;
+    const k = try std.fmt.hexToBytes(&buf, key);
+
+    const check1 = "eyJpc3MiOiJpc3MiLCJpYXQiOjE1Njc4NDIzODgsImV4cCI6MTc2Nzg0MjM4OCwiYXVkIjoiZXhhbXBsZS5jb20iLCJzdWIiOiJzdWIiLCJqdGkiOiJqdGkgcnJyIiwibmJmIjoxNTY3ODQyMzg4fQ";
+    const now = time.timestamp();
+
+    const m = try utils.base64UrlDecode(alloc, check1);
+    defer alloc.free(m);
+
+    const f = "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}";
+    const i = "{\"test-vector\":\"2-E-3\"}";
+
+    var e = paseto.V2Local.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    const token = try e.encode(crypto.random, k);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V2Local.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, k);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+
+    var validator = try p.validator();
+    defer validator.deinit();
+
+    var msg_json = try p.getMessage();
+    defer msg_json.deinit();
+
+    try testing.expectEqual(true, validator.hasBeenIssuedBy("iss"));
+    try testing.expectEqual(true, validator.isRelatedTo("sub"));
+    try testing.expectEqual(true, validator.isIdentifiedBy("jti rrr"));
+    try testing.expectEqual(true, validator.isPermittedFor("example.com"));
+    try testing.expectEqual(true, validator.hasBeenIssuedBefore(now));
+    try testing.expectEqual(false, validator.isExpired(now));
+
+    try testing.expectEqual(true, msg_json.value.object.get("nbf").?.integer > 0);
+
+    try testing.expectEqual(1567842388, msg_json.value.object.get("iat").?.integer);
+    try testing.expectEqual(1767842388, msg_json.value.object.get("exp").?.integer);
+    try testing.expectEqual(1567842388, msg_json.value.object.get("nbf").?.integer);
+
+    try testing.expectEqual(true, validator.hasBeenIssuedBefore(1567842389));
+    try testing.expectEqual(true, validator.isMinimumTimeBefore(1567842389));
+    try testing.expectEqual(true, validator.isExpired(1767842389));
 }

@@ -15,7 +15,7 @@ pub const Validator = struct {
         leeway: i64 = 0,
     };
 
-    pub fn init(message: json.Parsed(json.Value), options: Options) !Self {
+    pub fn init(message: json.Parsed(json.Value), options: Options) Self {
         return .{
             .message = message,
             .leeway = options.leeway,
@@ -155,7 +155,7 @@ test "Validator isExpired" {
     const msg_json = try utils.jsonDecode(alloc, msg);
     defer msg_json.deinit();
 
-    var validator = try Validator.init(msg_json, .{});
+    var validator = Validator.init(msg_json, .{});
     // defer validator.deinit();
 
     const isExpired = validator.isExpired(now);
@@ -177,7 +177,7 @@ test "Validator isMinimumTimeBefore" {
     const msg_json = try utils.jsonDecode(alloc, msg);
     defer msg_json.deinit();
 
-    var validator = try Validator.init(msg_json, .{});
+    var validator = Validator.init(msg_json, .{});
     // defer validator.deinit();
 
     const isMinimumTimeBefore = validator.isMinimumTimeBefore(now);
@@ -198,7 +198,7 @@ test "Validator" {
     const msg_json = try utils.jsonDecode(alloc, msg);
     defer msg_json.deinit();
 
-    var validator = try Validator.init(msg_json, .{});
+    var validator = Validator.init(msg_json, .{});
     // defer validator.deinit();
 
     try testing.expectEqual(true, validator.hasBeenIssuedBy("iss"));
@@ -220,7 +220,7 @@ test "Validator" {
 
     // ======
 
-    var validator2 = try Validator.init(msg_json, .{});
+    var validator2 = Validator.init(msg_json, .{});
     // defer validator2.deinit();
 
     validator2.withLeeway(3);
