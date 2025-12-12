@@ -104,6 +104,10 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
             return utils.jsonDecodeT(T, self.alloc, self.message);
         }
 
+        pub fn getMessageRaw(self: *Self) ![]const u8 {
+            return self.alloc.dupe(u8, self.message);
+        }
+
         pub fn getFooter(self: *Self) !json.Parsed(json.Value) {
             return utils.jsonDecode(self.alloc, self.footer);
         }
@@ -112,12 +116,20 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
             return utils.jsonDecodeT(T, self.alloc, self.footer);
         }
 
+        pub fn getFooterRaw(self: *Self) ![]const u8 {
+            return self.alloc.dupe(u8, self.footer);
+        }
+
         pub fn getImplicit(self: *Self) !json.Parsed(json.Value) {
             return utils.jsonDecode(self.alloc, self.implicit);
         }
 
         pub fn getImplicitT(self: *Self, comptime T: type) !json.Parsed(T) {
             return utils.jsonDecodeT(T, self.alloc, self.implicit);
+        }
+
+        pub fn getImplicitRaw(self: *Self) ![]const u8 {
+            return self.alloc.dupe(u8, self.implicit);
         }
 
         // encode paseto token

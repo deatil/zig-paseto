@@ -45,6 +45,16 @@ test "V4Local EncryptDecrypt" {
     try testing.expectFmt(f, "{s}", .{p.footer});
     try testing.expectFmt(i, "{s}", .{p.implicit});
 
+    const m2 = try p.getMessageRaw();
+    defer alloc.free(m2);
+    const f2 = try p.getFooterRaw();
+    defer alloc.free(f2);
+    const ii2 = try p.getImplicitRaw();
+    defer alloc.free(ii2);
+    try testing.expectFmt(m, "{s}", .{m2});
+    try testing.expectFmt(f, "{s}", .{f2});
+    try testing.expectFmt(i, "{s}", .{ii2});
+
     const g_m = try p.getMessage();
     defer g_m.deinit();
     try testing.expectEqualStrings("this is a signed message", g_m.value.object.get("data").?.string);

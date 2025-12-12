@@ -39,8 +39,7 @@ or use local path to add dependency at `build.zig.zon` file
             .path = "./lib/zig-paseto",
         },
         ...
-    },
-    ...
+    }
 }
 ```
 
