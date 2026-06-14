@@ -109,7 +109,9 @@ test "V4Local EncryptDecrypt" {
     const f = "test-f";
     const i = "test-i";
 
-    const encoded = try e.encode(crypto.random, msg, key, f, i);
+    var prng = std.Random.DefaultPrng.init(1234);
+
+    const encoded = try e.encode(prng.random(), msg, key, f, i);
     defer alloc.free(encoded);
 
     // try testing.expectFmt(encoded_str, "{x}", .{encoded});
@@ -184,8 +186,10 @@ test "V4Local fail" {
         const alloc = testing.allocator;
         const e = V4Local.init(alloc);
 
+        var prng = std.Random.DefaultPrng.init(1234);
+
         var need_true: bool = false;
-        _ = e.encode(crypto.random, msg, k, f, i) catch |err| {
+        _ = e.encode(prng.random(), msg, k, f, i) catch |err| {
             need_true = true;
             try testing.expectEqual(error.PasetoInvalidKeySize, err);
         };

@@ -108,7 +108,9 @@ test "V1Public EncryptDecrypt" {
     const secret_key = try rsa.SecretKey.fromDer(prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
 
-    const encoded = try e.encode(crypto.random, msg, secret_key, f, i);
+    var prng = std.Random.DefaultPrng.init(1234);
+
+    const encoded = try e.encode(prng.random(), msg, secret_key, f, i);
     defer alloc.free(encoded);
 
     try testing.expectEqual(true, encoded.len > 0);

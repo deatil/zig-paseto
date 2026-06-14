@@ -5,7 +5,7 @@ A PASETO (Platform-Agnostic SEcurity TOkens) library for zig.
 
 ### Env
 
- - Zig >= 0.16.0-dev.164+bc7955306.
+ - Zig >= 0.16.0
 
 
 ### What is PASETO?
@@ -65,7 +65,9 @@ const crypto = std.crypto;
 
 const paseto = @import("zig-paseto");
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
+    _ = init;
+
     const alloc = std.heap.page_allocator;
 
     const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";

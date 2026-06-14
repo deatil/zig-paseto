@@ -92,9 +92,11 @@ test "V3Public EncryptDecrypt" {
     const f = "test-f";
     const i = "test-i";
 
-    const kp = EcdsaP384Sha384.KeyPair.generate();
+    const kp = EcdsaP384Sha384.KeyPair.generate(testing.io);
 
-    const encoded = try e.encode(crypto.random, msg, kp.secret_key, f, i);
+    var prng = std.Random.DefaultPrng.init(1234);
+
+    const encoded = try e.encode(prng.random(), msg, kp.secret_key, f, i);
     defer alloc.free(encoded);
 
     // try testing.expectFmt(encoded_str, "{x}", .{encoded});

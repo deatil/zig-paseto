@@ -1,6 +1,5 @@
 const std = @import("std");
 const json = std.json;
-const time = std.time;
 const testing = std.testing;
 
 const utils = @import("utils.zig");
@@ -147,7 +146,8 @@ test "Validator isExpired" {
     const alloc = testing.allocator;
 
     const check1 = "eyJleHAiOjE3Mzk4MTAzOTB9";
-    const now = time.timestamp();
+    const ts = std.Io.Clock.real.now(testing.io).nanoseconds;
+    const now = @as(i64, @intCast(ts));
 
     const msg = try utils.base64UrlDecode(alloc, check1);
     defer alloc.free(msg);
@@ -169,7 +169,8 @@ test "Validator isMinimumTimeBefore" {
     const alloc = testing.allocator;
 
     const check1 = "eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyIsIm5iZiI6MTczOTgxNjU0MH0";
-    const now = time.timestamp();
+    const ts = std.Io.Clock.real.now(testing.io).nanoseconds;
+    const now = @as(i64, @intCast(ts));
 
     const msg = try utils.base64UrlDecode(alloc, check1);
     defer alloc.free(msg);
@@ -190,7 +191,7 @@ test "Validator" {
     const alloc = testing.allocator;
 
     const check1 = "eyJpc3MiOiJpc3MiLCJpYXQiOjE1Njc4NDIzODgsImV4cCI6MTc2Nzg0MjM4OCwiYXVkIjoiZXhhbXBsZS5jb20iLCJzdWIiOiJzdWIiLCJqdGkiOiJqdGkgcnJyIiwibmJmIjoxNTY3ODQyMzg4fQ";
-    const now = time.timestamp();
+    const now: i64 = 1767812389;
 
     const msg = try utils.base64UrlDecode(alloc, check1);
     defer alloc.free(msg);
