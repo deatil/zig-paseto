@@ -50,7 +50,7 @@ pub fn EncodeV2Local(comptime name: []const u8) type {
             var ciphertext = try self.alloc.alloc(u8, ciphertext_len);
             defer self.alloc.free(ciphertext);
 
-            const m2 = try utils.pre_auth_encoding(self.alloc, &[_][]const u8{ local_prefix, nonce[0..], f });
+            const m2 = try utils.preAuthEncoding(self.alloc, &[_][]const u8{ local_prefix, nonce[0..], f });
             defer self.alloc.free(m2);
 
             // Encrypt the payload
@@ -95,7 +95,7 @@ pub fn EncodeV2Local(comptime name: []const u8) type {
             const ciphertext = c[0..plaintext_len];
             const auth_tag = c[plaintext_len..][0..tag_len];
 
-            const m2 = try utils.pre_auth_encoding(self.alloc, &[_][]const u8{ local_prefix, n, f });
+            const m2 = try utils.preAuthEncoding(self.alloc, &[_][]const u8{ local_prefix, n, f });
             defer self.alloc.free(m2);
 
             // Decrypt the payload

@@ -67,7 +67,7 @@ pub fn eq(rest: []const u8, needle: []const u8) bool {
 }
 
 // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Common.md#authentication-padding
-pub fn pre_auth_encoding(alloc: Allocator, pieces: []const []const u8) ![]u8 {
+pub fn preAuthEncoding(alloc: Allocator, pieces: []const []const u8) ![]u8 {
     // Precompute length to allocate the buffer
     // PieceCount (8B) || ( PieceLen (8B) || Piece (*B) )*
     var buf_len: usize = 8;
@@ -156,14 +156,14 @@ test "jsonEncode" {
     try testing.expectEqualStrings(msg.typ, res3.value.typ);
 }
 
-test "pre_auth_encoding" {
+test "preAuthEncoding" {
     {
-        const str = try pre_auth_encoding(testing.allocator, &[_][]const u8{});
+        const str = try preAuthEncoding(testing.allocator, &[_][]const u8{});
         defer testing.allocator.free(str);
         try testing.expectFmt("0000000000000000", "{x}", .{str});
     }
     {
-        const str = try pre_auth_encoding(testing.allocator, &[_][]const u8{"test"});
+        const str = try preAuthEncoding(testing.allocator, &[_][]const u8{"test"});
         defer testing.allocator.free(str);
         //try testing.expectEqual(&[_]u8{
         //    0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Count

@@ -36,7 +36,7 @@ pub fn EncodeV4Public(comptime name: []const u8) type {
             _ = r;
 
             // Compute pre-authentication message
-            const m2 = try utils.pre_auth_encoding(self.alloc, &[_][]const u8{ public_prefix, msg, f, i });
+            const m2 = try utils.preAuthEncoding(self.alloc, &[_][]const u8{ public_prefix, msg, f, i });
             defer self.alloc.free(m2);
 
             var secret_key = try Ed25519.KeyPair.fromSecretKey(key);
@@ -60,7 +60,7 @@ pub fn EncodeV4Public(comptime name: []const u8) type {
             const s = encoded[encoded.len - encoded_length ..];
 
             // Compute pre-authentication message
-            const m2 = try utils.pre_auth_encoding(self.alloc, &[_][]const u8{ public_prefix, m, f, i });
+            const m2 = try utils.preAuthEncoding(self.alloc, &[_][]const u8{ public_prefix, m, f, i });
             defer self.alloc.free(m2);
 
             var signed: [encoded_length]u8 = undefined;

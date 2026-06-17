@@ -64,7 +64,7 @@ pub fn kdf(key: []const u8, n: []const u8) !KDFData {
 
 pub fn mac(alloc: Allocator, ak: []const u8, h: []const u8, n: []const u8, c: []const u8, f: []const u8, i: []const u8) ![mac_length]u8 {
     // Compute pre-authentication message
-    const pre_auth = try utils.pre_auth_encoding(alloc, &[_][]const u8{ h, n, c, f, i });
+    const pre_auth = try utils.preAuthEncoding(alloc, &[_][]const u8{ h, n, c, f, i });
     defer alloc.free(pre_auth);
 
     const Blake2bMac = blake2.Blake2b(mac_length * 8);

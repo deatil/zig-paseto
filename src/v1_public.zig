@@ -37,7 +37,7 @@ pub fn EncodeV1Public(comptime name: []const u8) type {
             _ = i;
 
             // Compute pre-authentication message
-            const m2 = try utils.pre_auth_encoding(self.alloc, &[_][]const u8{ public_prefix, msg, f });
+            const m2 = try utils.preAuthEncoding(self.alloc, &[_][]const u8{ public_prefix, msg, f });
             defer self.alloc.free(m2);
 
             var signer = RsaPssSha384.Signer.init(key, null);
@@ -72,7 +72,7 @@ pub fn EncodeV1Public(comptime name: []const u8) type {
             @memcpy(s2[0..], s[0..]);
 
             // Compute pre-authentication message
-            const m2 = try utils.pre_auth_encoding(self.alloc, &[_][]const u8{ public_prefix, m, f });
+            const m2 = try utils.preAuthEncoding(self.alloc, &[_][]const u8{ public_prefix, m, f });
             defer self.alloc.free(m2);
 
             var sig = RsaPssSha384.Signature.fromBytes(s2[0..]);
