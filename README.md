@@ -86,7 +86,9 @@ pub fn main(init: std.process.Init) !void {
     try e.withFooter(f);
     try e.withImplicit(i);
 
-    const token = try e.encode(crypto.random, k);
+    var prng = std.Random.DefaultPrng.init(1234);
+
+    const token = try e.encode(prng.random(), k);
     defer alloc.free(token);
     
     // output: 
