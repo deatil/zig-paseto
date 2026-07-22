@@ -52,11 +52,6 @@ pub const Token = struct {
         self.claims = try self.alloc.dupe(u8, claims);
     }
 
-    pub fn setClaims(self: *Self, claims: anytype) !void {
-        self.alloc.free(self.claims);
-        self.claims = try utils.jsonEncode(self.alloc, claims);
-    }
-
     pub fn withFooter(self: *Self, footer: []const u8) !void {
         self.alloc.free(self.footer);
         self.footer = try self.alloc.dupe(u8, footer);
@@ -151,15 +146,7 @@ pub const Token = struct {
         return self.alloc.dupe(u8, self.header);
     }
 
-    pub fn getClaims(self: *Self) !json.Parsed(json.Value) {
-        return utils.jsonDecode(self.alloc, self.claims);
-    }
-
-    pub fn getClaimsT(self: *Self, comptime T: type) !json.Parsed(T) {
-        return utils.jsonDecodeT(T, self.alloc, self.claims);
-    }
-
-    pub fn getClaimsRaw(self: *Self) ![]const u8 {
+    pub fn getClaims(self: *Self) ![]const u8 {
         return self.alloc.dupe(u8, self.claims);
     }
 
@@ -180,10 +167,9 @@ test "Token" {
     const alloc = testing.allocator;
 
     const header = "v4.local";
-    const claims = .{
-        .aud = "example.com",
-        .iat = "foo",
-    };
+    const claims =
+        \\{"aud":"example.com","iat":"foo"}
+    ;
     const footer = .{
         .bar = "foo",
     };
@@ -192,7 +178,7 @@ test "Token" {
 
     var token = Token.init(alloc);
     try token.withHeader(header);
-    try token.setClaims(claims);
+    try token.withClaims(claims);
     try token.setFooter(footer);
 
     defer token.deinit();
@@ -226,9 +212,8 @@ test "Token" {
     try testing.expectEqualStrings(header, header2);
 
     const claims2 = try token2.getClaims();
-    defer claims2.deinit();
-    try testing.expectEqualStrings(claims.aud, claims2.value.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.iat, claims2.value.object.get("iat").?.string);
+    defer alloc.free(claims2);
+    try testing.expectEqualStrings(claims, claims2);
 
     const footer2 = try token2.getFooter();
     defer footer2.deinit();
@@ -258,17 +243,16 @@ test "Token 2" {
     const alloc = testing.allocator;
 
     const header = "v4.local";
-    const claims = .{
-        .aud = "example.com",
-        .iat = "foo",
-    };
+    const claims =
+        \\{"aud":"example.com","iat":"foo"}
+    ;
     const footer = "test-footer";
 
     const check1 = "v4.local.eyJhdWQiOiJleGFtcGxlLmNvbSIsImlhdCI6ImZvbyJ9.dGVzdC1mb290ZXI";
 
     var token = Token.init(alloc);
     try token.withHeader(header);
-    try token.setClaims(claims);
+    try token.withClaims(claims);
     try token.withFooter(footer);
 
     defer token.deinit();
@@ -295,10 +279,9 @@ test "Token 3" {
     const alloc = testing.allocator;
 
     const header = "v4.local";
-    const claims = .{
-        .aud = "example.com",
-        .iat = "foo",
-    };
+    const claims =
+        \\{"aud":"example.com","iat":"foo"}
+    ;
     const footer = .{
         .bar = "foo",
     };
@@ -307,7 +290,7 @@ test "Token 3" {
 
     var token = Token.init(alloc);
     try token.withHeader(header);
-    try token.setClaims(claims);
+    try token.withClaims(claims);
     try token.setFooter(footer);
 
     defer token.deinit();
@@ -323,7 +306,7 @@ test "Token 3" {
         .ver = "v4",
         .typ = "local",
     });
-    try token1.setClaims(claims);
+    try token1.withClaims(claims);
     try token1.setFooter(footer);
 
     defer token1.deinit();
@@ -339,19 +322,9 @@ test "Token 3" {
 
     defer token2.deinit();
 
-    const claimsT = struct {
-        aud: []const u8,
-        iat: []const u8,
-    };
-    const claims3 = try token2.getClaimsT(claimsT);
-    defer claims3.deinit();
-    try testing.expectEqualStrings(claims.aud, claims3.value.aud);
-    try testing.expectEqualStrings(claims.iat, claims3.value.iat);
-
     const claims33 = try token2.getClaims();
-    defer claims33.deinit();
-    try testing.expectEqualStrings(claims.aud, claims33.value.object.get("aud").?.string);
-    try testing.expectEqualStrings(claims.iat, claims33.value.object.get("iat").?.string);
+    defer alloc.free(claims33);
+    try testing.expectEqualStrings(claims, claims33);
 
     const footerT = struct {
         bar: []const u8,
@@ -374,7 +347,7 @@ test "Token 3" {
     defer alloc.free(header11);
     try testing.expectEqualStrings("v4.local", header11);
 
-    const claims11 = try token2.getClaimsRaw();
+    const claims11 = try token2.getClaims();
     defer alloc.free(claims11);
     const claims11_check =
         \\{"aud":"example.com","iat":"foo"}
@@ -411,7 +384,7 @@ test "Token with" {
     defer alloc.free(header11);
     try testing.expectEqualStrings(header, header11);
 
-    const claims11 = try token.getClaimsRaw();
+    const claims11 = try token.getClaims();
     defer alloc.free(claims11);
     try testing.expectEqualStrings(claims, claims11);
 

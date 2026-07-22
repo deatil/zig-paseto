@@ -2,8 +2,8 @@ const std = @import("std");
 const json = std.json;
 const Allocator = std.mem.Allocator;
 
-pub const Ed25519 = std.crypto.sign.Ed25519;
 pub const ecdsa = std.crypto.sign.ecdsa;
+pub const Ed25519 = std.crypto.sign.Ed25519;
 pub const EcdsaP384Sha384 = ecdsa.EcdsaP384Sha384;
 
 pub const rsa = @import("rsa/rsa.zig");
@@ -43,6 +43,24 @@ pub const V4Public = Paseto(v4_public.V4Public, Ed25519.SecretKey, Ed25519.Publi
 pub const Error = error{
     PasetoTokenInvalid,
     PasetoTokAlgoInvalid,
+};
+
+// jwt claims struct
+pub const JWTClaims = struct {
+    // Issuer
+    iss: ?[]const u8 = null,
+    // Issued At
+    iat: ?i64 = null,
+    // Expiration Time
+    exp: ?i64 = null,
+    // Audience
+    aud: ?[]const u8 = null,
+    // Subject
+    sub: ?[]const u8 = null,
+    // JWT ID
+    jti: ?[]const u8 = null,
+    // Not Before
+    nbf: ?i64 = null,
 };
 
 pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime DecodeKeyType: type) type {
@@ -145,31 +163,17 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
             defer t.deinit();
 
             const encoded_string = try t.encode();
-
             return encoded_string;
         }
 
         // decode paseto token
         pub fn decode(self: *Self, token_string: []const u8, decode_key: DecodeKeyType) !void {
-            var t = try self.parseToken(token_string);
+            var t = try self.parse(token_string, decode_key);
             defer t.deinit();
-
-            try self.parse(t, decode_key);
         }
 
-        // parse token
-        pub fn parse(self: *Self, token: Token, decode_key: DecodeKeyType) !void {
-            const decoded = try self.encoder.decode(token.claims, decode_key, token.footer, self.implicit);
-
-            self.alloc.free(self.message);
-            self.alloc.free(self.footer);
-
-            self.message = decoded;
-            self.footer = try self.alloc.dupe(u8, token.footer);
-        }
-
-        // parse token and return Token struct
-        pub fn parseToken(self: *Self, token_string: []const u8) !Token {
+        // parse token string
+        pub fn parse(self: *Self, token_string: []const u8, decode_key: DecodeKeyType) !Token {
             var t = Token.init(self.alloc);
             t.parse(token_string);
 
@@ -188,6 +192,20 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
                 return Error.PasetoTokAlgoInvalid;
             }
 
+            const claims = try t.getClaims();
+            defer self.alloc.free(claims);
+
+            const footer = try t.getFooterRaw();
+            defer self.alloc.free(footer);
+
+            const decoded = try self.encoder.decode(claims, decode_key, footer, self.implicit);
+
+            self.alloc.free(self.message);
+            self.alloc.free(self.footer);
+
+            self.message = decoded;
+            self.footer = try self.alloc.dupe(u8, footer);
+
             return t;
         }
 
@@ -199,24 +217,6 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
         }
     };
 }
-
-// jwt claims struct
-pub const JWTClaims = struct {
-    // Issuer
-    iss: ?[]const u8 = null,
-    // Issued At
-    iat: ?i64 = null,
-    // Expiration Time
-    exp: ?i64 = null,
-    // Audience
-    aud: ?[]const u8 = null,
-    // Subject
-    sub: ?[]const u8 = null,
-    // JWT ID
-    jti: ?[]const u8 = null,
-    // Not Before
-    nbf: ?i64 = null,
-};
 
 test {
     _ = @import("paseto_test.zig");
