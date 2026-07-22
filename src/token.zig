@@ -15,6 +15,11 @@ pub const Token = struct {
 
     const Self = @This();
 
+    pub const HeaderData = struct {
+        ver: []const u8,
+        typ: []const u8,
+    };
+
     pub fn init(alloc: Allocator) Self {
         return .{
             .alloc = alloc,
@@ -22,6 +27,10 @@ pub const Token = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        self.reset();
+    }
+
+    pub fn reset(self: *Self) void {
         self.alloc.free(self.raw);
         self.alloc.free(self.header);
         self.alloc.free(self.claims);
@@ -29,22 +38,32 @@ pub const Token = struct {
     }
 
     pub fn withHeader(self: *Self, header: []const u8) !void {
+        self.alloc.free(self.header);
         self.header = try self.alloc.dupe(u8, header);
     }
 
+    pub fn setHeader(self: *Self, opts: HeaderData) !void {
+        self.alloc.free(self.header);
+        self.header = try std.mem.join(self.alloc, ".", &[_][]const u8{ opts.ver, opts.typ });
+    }
+
     pub fn withClaims(self: *Self, claims: []const u8) !void {
+        self.alloc.free(self.claims);
         self.claims = try self.alloc.dupe(u8, claims);
     }
 
     pub fn setClaims(self: *Self, claims: anytype) !void {
+        self.alloc.free(self.claims);
         self.claims = try utils.jsonEncode(self.alloc, claims);
     }
 
     pub fn withFooter(self: *Self, footer: []const u8) !void {
+        self.alloc.free(self.footer);
         self.footer = try self.alloc.dupe(u8, footer);
     }
 
     pub fn setFooter(self: *Self, footer: anytype) !void {
+        self.alloc.free(self.footer);
         self.footer = try utils.jsonEncode(self.alloc, footer);
     }
 
@@ -72,17 +91,16 @@ pub const Token = struct {
     }
 
     pub fn parse(self: *Self, token_string: []const u8) void {
-        self.raw = self.alloc.dupe(u8, token_string) catch "";
-        self.header = "";
-        self.claims = "";
-        self.footer = "";
+        self.reset();
 
         if (token_string.len == 0) {
             return;
         }
 
-        var header_ver: []const u8 = undefined;
-        var header_type: []const u8 = undefined;
+        self.raw = self.alloc.dupe(u8, token_string) catch "";
+
+        var header_ver: []const u8 = "";
+        var header_type: []const u8 = "";
 
         var it = std.mem.splitScalar(u8, token_string, '.');
         if (it.next()) |pair| {
@@ -111,7 +129,25 @@ pub const Token = struct {
         return count + 1;
     }
 
-    pub fn getHeader(self: *Self) ![]const u8 {
+    pub fn getHeader(self: *Self) !HeaderData {
+        var header_ver: []const u8 = "";
+        var header_type: []const u8 = "";
+
+        var it = std.mem.splitScalar(u8, self.header, '.');
+        if (it.next()) |pair| {
+            header_ver = pair;
+        }
+        if (it.next()) |pair| {
+            header_type = pair;
+        }
+
+        return .{
+            .ver = header_ver,
+            .typ = header_type,
+        };
+    }
+
+    pub fn getHeaderRaw(self: *Self) ![]const u8 {
         return self.alloc.dupe(u8, self.header);
     }
 
@@ -123,12 +159,20 @@ pub const Token = struct {
         return utils.jsonDecodeT(T, self.alloc, self.claims);
     }
 
+    pub fn getClaimsRaw(self: *Self) ![]const u8 {
+        return self.alloc.dupe(u8, self.claims);
+    }
+
     pub fn getFooter(self: *Self) !json.Parsed(json.Value) {
         return utils.jsonDecode(self.alloc, self.footer);
     }
 
     pub fn getFooterT(self: *Self, comptime T: type) !json.Parsed(T) {
         return utils.jsonDecodeT(T, self.alloc, self.footer);
+    }
+
+    pub fn getFooterRaw(self: *Self) ![]const u8 {
+        return self.alloc.dupe(u8, self.footer);
     }
 };
 
@@ -177,7 +221,7 @@ test "Token" {
 
     defer token2.deinit();
 
-    const header2 = try token2.getHeader();
+    const header2 = try token2.getHeaderRaw();
     defer alloc.free(header2);
     try testing.expectEqualStrings(header, header2);
 
@@ -274,6 +318,22 @@ test "Token 3" {
 
     // ================
 
+    var token1 = Token.init(alloc);
+    try token1.setHeader(.{
+        .ver = "v4",
+        .typ = "local",
+    });
+    try token1.setClaims(claims);
+    try token1.setFooter(footer);
+
+    defer token1.deinit();
+
+    const res11 = try token1.encode();
+    defer alloc.free(res11);
+    try testing.expectEqualStrings(check1, res11);
+
+    // ================
+
     var token2 = Token.init(alloc);
     token2.parse(check1);
 
@@ -288,6 +348,11 @@ test "Token 3" {
     try testing.expectEqualStrings(claims.aud, claims3.value.aud);
     try testing.expectEqualStrings(claims.iat, claims3.value.iat);
 
+    const claims33 = try token2.getClaims();
+    defer claims33.deinit();
+    try testing.expectEqualStrings(claims.aud, claims33.value.object.get("aud").?.string);
+    try testing.expectEqualStrings(claims.iat, claims33.value.object.get("iat").?.string);
+
     const footerT = struct {
         bar: []const u8,
     };
@@ -298,4 +363,59 @@ test "Token 3" {
     const footer33 = try token2.getFooter();
     defer footer33.deinit();
     try testing.expectEqualStrings(footer.bar, footer33.value.object.get("bar").?.string);
+
+    const header3 = try token2.getHeader();
+    try testing.expectEqualStrings("v4", header3.ver);
+    try testing.expectEqualStrings("local", header3.typ);
+
+    // ================
+
+    const header11 = try token2.getHeaderRaw();
+    defer alloc.free(header11);
+    try testing.expectEqualStrings("v4.local", header11);
+
+    const claims11 = try token2.getClaimsRaw();
+    defer alloc.free(claims11);
+    const claims11_check =
+        \\{"aud":"example.com","iat":"foo"}
+    ;
+    try testing.expectEqualStrings(claims11_check, claims11);
+
+    const footer11 = try token2.getFooterRaw();
+    defer alloc.free(footer11);
+    const footer11_check =
+        \\{"bar":"foo"}
+    ;
+    try testing.expectEqualStrings(footer11_check, footer11);
+}
+
+test "Token with" {
+    const alloc = testing.allocator;
+
+    const header = "v4.local";
+    const claims =
+        \\{"aud":"example.com","iat":"foo"}
+    ;
+    const footer =
+        \\{"bar":"foo"}
+    ;
+
+    var token = Token.init(alloc);
+    try token.withHeader(header);
+    try token.withClaims(claims);
+    try token.withFooter(footer);
+
+    defer token.deinit();
+
+    const header11 = try token.getHeaderRaw();
+    defer alloc.free(header11);
+    try testing.expectEqualStrings(header, header11);
+
+    const claims11 = try token.getClaimsRaw();
+    defer alloc.free(claims11);
+    try testing.expectEqualStrings(claims, claims11);
+
+    const footer11 = try token.getFooterRaw();
+    defer alloc.free(footer11);
+    try testing.expectEqualStrings(footer, footer11);
 }

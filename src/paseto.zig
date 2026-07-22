@@ -179,7 +179,7 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
                 return Error.PasetoTokenInvalid;
             }
 
-            const header = try t.getHeader();
+            const header = try t.getHeaderRaw();
             defer self.alloc.free(header);
 
             if (!utils.eq(header, self.encoder.alg())) {
