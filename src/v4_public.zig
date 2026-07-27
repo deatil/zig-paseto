@@ -55,6 +55,10 @@ pub fn EncodeV4Public(comptime name: []const u8) type {
         // PASETO v4 signature verification primitive.
         // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version4.md#verify
         pub fn decode(self: Self, encoded: []const u8, key: Ed25519.PublicKey, f: []const u8, i: []const u8) ![]u8 {
+            if (encoded.len < encoded_length) {
+                return error.PasetoInvalidToken;
+            }
+
             // Extract components
             const m = encoded[0 .. encoded.len - encoded_length];
             const s = encoded[encoded.len - encoded_length ..];
@@ -130,6 +134,17 @@ test "V4Public Decrypt check" {
     defer alloc.free(res);
 
     try testing.expectFmt(m, "{s}", .{res});
+}
+
+test "V4Public rejects truncated signature" {
+    const kp = Ed25519.KeyPair.generate(testing.io);
+    const e = V4Public.init(testing.allocator);
+    const encoded: [Ed25519.Signature.encoded_length - 1]u8 = @splat(0);
+
+    try testing.expectError(
+        error.PasetoInvalidToken,
+        e.decode(&encoded, kp.public_key, "", ""),
+    );
 }
 
 test "V4Public fail" {
