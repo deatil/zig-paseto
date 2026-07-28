@@ -29,6 +29,8 @@ pub fn EncodeV1Local(comptime name: []const u8) type {
             return name;
         }
 
+        // PASETO v1 key encrypt primitive.
+        // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version1.md#encrypt
         pub fn encode(self: Self, r: std.Random, msg: []const u8, key: []const u8, f: []const u8, i: []const u8) ![]u8 {
             _ = i;
 
@@ -63,6 +65,8 @@ pub fn EncodeV1Local(comptime name: []const u8) type {
             return out;
         }
 
+        // PASETO v1 key decrypt primitive.
+        // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version1.md#decrypt
         pub fn decode(self: Self, encoded: []const u8, key: []const u8, f: []const u8, i: []const u8) ![]u8 {
             _ = i;
 

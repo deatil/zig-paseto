@@ -29,6 +29,8 @@ pub fn EncodeV3Local(comptime name: []const u8) type {
             return name;
         }
 
+        // PASETO v3 key encrypt primitive.
+        // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version3.md#encrypt
         pub fn encode(self: Self, r: std.Random, msg: []const u8, key: []const u8, f: []const u8, i: []const u8) ![]u8 {
             if (key.len != 32) {
                 return error.PasetoInvalidKeySize;
@@ -59,9 +61,15 @@ pub fn EncodeV3Local(comptime name: []const u8) type {
             return out;
         }
 
+        // PASETO v3 key decrypt primitive.
+        // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version3.md#decrypt
         pub fn decode(self: Self, encoded: []const u8, key: []const u8, f: []const u8, i: []const u8) ![]u8 {
             if (key.len != 32) {
                 return error.PasetoInvalidKeySize;
+            }
+
+            if (encoded.len < 80) {
+                return error.PasetoIncorrectTokenFormat;
             }
 
             // Extract components

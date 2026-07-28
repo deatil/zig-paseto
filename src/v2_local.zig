@@ -29,6 +29,8 @@ pub fn EncodeV2Local(comptime name: []const u8) type {
             return name;
         }
 
+        // PASETO v2 key encrypt primitive.
+        // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version2.md#encrypt
         pub fn encode(self: Self, r: std.Random, msg: []const u8, key: []const u8, f: []const u8, i: []const u8) ![]u8 {
             if (key.len != 32) {
                 return error.PasetoInvalidKeySize;
@@ -71,6 +73,8 @@ pub fn EncodeV2Local(comptime name: []const u8) type {
             return out;
         }
 
+        // PASETO v2 key decrypt primitive.
+        // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version2.md#decrypt
         pub fn decode(self: Self, encoded: []const u8, key: []const u8, f: []const u8, i: []const u8) ![]u8 {
             if (key.len != 32) {
                 return error.PasetoInvalidKeySize;
@@ -80,6 +84,10 @@ pub fn EncodeV2Local(comptime name: []const u8) type {
 
             const tag_len = XChaCha20Poly1305.tag_length;
             const nonce_length = XChaCha20Poly1305.nonce_length;
+
+            if (encoded.len < tag_len + nonce_length) {
+                return error.PasetoIncorrectTokenFormat;
+            }
 
             // Extract components
             const n = encoded[0..nonce_length];

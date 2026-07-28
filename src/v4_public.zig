@@ -55,6 +55,10 @@ pub fn EncodeV4Public(comptime name: []const u8) type {
         // PASETO v4 signature verification primitive.
         // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version4.md#verify
         pub fn decode(self: Self, encoded: []const u8, key: Ed25519.PublicKey, f: []const u8, i: []const u8) ![]u8 {
+            if (encoded.len < encoded_length) {
+                return error.PasetoIncorrectTokenFormat;
+            }
+
             // Extract components
             const m = encoded[0 .. encoded.len - encoded_length];
             const s = encoded[encoded.len - encoded_length ..];
