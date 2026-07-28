@@ -220,3 +220,35 @@ test "V3Local fail" {
         try testing.expectEqual(true, need_true);
     }
 }
+
+test "V3Local Decrypt fail" {
+    const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
+
+    var buf: [32]u8 = undefined;
+    const k = try std.fmt.hexToBytes(&buf, key);
+
+    const f = "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}";
+    const i = "{\"test-vector\":\"4-S-3\"}";
+
+    const encoded = "88e07beeebd7034c7af041e226c9b019e12d59bcbd5208360a26ff8c7f16b9ede8519e383d6b409d82e4c715ff93823e2bf007c1ccb5db904ad203ec85ec100872a857defe84e13eb5a3eefed714d437dfb57f3377c2fbe814e2b66d877b4f7606e88880c792f6d9e8417764405cad30be62efaa3286c61cdaffc12b7ebdb16fc7f3ba386137e58a18777296a2eb4e39ec729b80ae";
+
+    var encoded2: [149]u8 = undefined;
+    const encoded3 = try std.fmt.hexToBytes(&encoded2, encoded);
+
+    const alloc = testing.allocator;
+    const e = V3Local.init(alloc);
+
+    const res = e.decode(encoded3[0..60], k, f, i);
+    try testing.expectError(error.PasetoIncorrectTokenFormat, res);
+
+    const res1 = e.decode(encoded3[0..], k[0..30], f, i);
+    try testing.expectError(error.PasetoInvalidKeySize, res1);
+
+    const encoded1 = "88e07beeebd7034c7af041e226c9b019e12d59bcbd5208360a26ff8c7f16b9ede8519e383d6b409d82e4c715ff93823e2bf007c1ccb5db904ad203ec85ec100872a857defe84e13eb5a3eefed714d437dfb57f3377c2fbe814e2b66d877b4f7606e88880c792f6d9e8417764405cad30be62efaa3286c61cdaffc12b7ebdb16fc7f3ba386137e58a18777296a2eb4e39ec787b80ae";
+
+    var encoded12: [149]u8 = undefined;
+    const encoded13 = try std.fmt.hexToBytes(&encoded12, encoded1);
+
+    const res2 = e.decode(encoded13[0..], k, f, i);
+    try testing.expectError(error.PasetoInvalidPreAuthenticationHeader, res2);
+}

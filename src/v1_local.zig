@@ -74,6 +74,7 @@ pub fn EncodeV1Local(comptime name: []const u8) type {
                 return error.PasetoInvalidKeySize;
             }
 
+            // if len < 32 + 48
             if (encoded.len < v1.nonce_length + v1.mac_length) {
                 return error.PasetoIncorrectTokenFormat;
             }
@@ -250,4 +251,36 @@ test "V1Local fail" {
         };
         try testing.expectEqual(true, need_true);
     }
+}
+
+test "V1Local Decrypt fail" {
+    const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
+
+    var buf: [32]u8 = undefined;
+    const k = try std.fmt.hexToBytes(&buf, key);
+
+    const f = "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}";
+    const i = "{\"test-vector\":\"1-S-3\"}";
+
+    const encoded = "8ccacf422c54f3c8dc68a178677491164dbb853e8c66c93d96b959f569d7eb14510a344ffe5e59b33d61e3b2bf28aa1b2b9374f6288ea117b7b24dc4749a4c5c2bcc54601938294a868a8c545b6a19bbb58ec223fd8f66cdc0721ddb35aea10dff2a179bcb9868d339b6ef86e3279986bef2f9c8c20e1314a852788a4977dc7202179e8986b90b944e4e7a4f12793029863f874438";
+
+    var encoded2: [149]u8 = undefined;
+    const encoded3 = try std.fmt.hexToBytes(&encoded2, encoded);
+
+    const alloc = testing.allocator;
+    const e = V1Local.init(alloc);
+
+    const res = e.decode(encoded3[0..55], k, f, i);
+    try testing.expectError(error.PasetoIncorrectTokenFormat, res);
+
+    const res1 = e.decode(encoded3[0..], k[0..30], f, i);
+    try testing.expectError(error.PasetoInvalidKeySize, res1);
+
+    const encoded1 = "8ccacf422c54f3c8dc68a178677491164dbb853e8c66c93d96b959f569d7eb14510a344ffe5e59b33d61e3b2bf28aa1b2b9374f6288ea117b7b24dc4749a4c5c2bcc54601938294a868a8c545b6a19bbb58ec223fd8f66cdc0721ddb35aea10dff2a179bcb9868d339b6ef86e3279986bef2f9c8c20e1314a852788a4977dc7202179e8986b90b944e4e7a4f12793029863f872538";
+
+    var encoded12: [149]u8 = undefined;
+    const encoded13 = try std.fmt.hexToBytes(&encoded12, encoded1);
+
+    const res2 = e.decode(encoded13[0..], k, f, i);
+    try testing.expectError(error.PasetoInvalidPreAuthenticationHeader, res2);
 }

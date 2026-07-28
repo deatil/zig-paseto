@@ -172,3 +172,39 @@ test "V2Public fail" {
         try testing.expectEqual(true, need_true);
     }
 }
+
+test "V2Public Decrypt fail" {
+    const key = "b4cbfb43df4ce210727d953e4a713307fa19bb7d9f85041438d9e11b942a37741eb9dbbbbc047c03fd70604e0071f0987e16b28b757225c11f00415d0e20b1a2";
+
+    var buf: [64]u8 = undefined;
+    const k_bytes = try std.fmt.hexToBytes(&buf, key);
+
+    const f = "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}";
+    const i = "{\"test-vector\":\"2-S-3\"}";
+
+    const encoded = "7b2264617461223a22746869732069732061207369676e6564206d657373616765222c22657870223a22323032322d30312d30315430303a30303a30302b30303a3030227dd0c8bcba97e58e7e3852c936653d9394f2a57d69eb68ca0fa66bea02a0073ef29876c29942ca9af5d650d99ea400ee447aae7416f26ea733f4dead245e01250e";
+
+    var encoded2: [133]u8 = undefined;
+    const encoded3 = try std.fmt.hexToBytes(&encoded2, encoded);
+
+    var prikey_bytes: [Ed25519.SecretKey.encoded_length]u8 = undefined;
+    @memcpy(prikey_bytes[0..], k_bytes);
+
+    const prikey = try Ed25519.SecretKey.fromBytes(prikey_bytes);
+    const kp = try Ed25519.KeyPair.fromSecretKey(prikey);
+    const pubkey = kp.public_key;
+
+    const alloc = testing.allocator;
+    const e = V2Public.init(alloc);
+
+    const res = e.decode(encoded3[0..20], pubkey, f, i);
+    try testing.expectError(error.PasetoIncorrectTokenFormat, res);
+
+    const encoded1 = "7b2264617461223a22746869732069732061207369676e6564206d657373616765222c22657870223a22323032322d30312d30315430303a30303a30302b30303a3030227dd0c8bcba97e58e7e3852c936653d9394f2a57d69eb68ca0fa66bea02a0073ef29876c29942ca9af5d650d99ea400ee447aae7416f26ea722f4dead245e01250e";
+
+    var encoded12: [133]u8 = undefined;
+    const encoded13 = try std.fmt.hexToBytes(&encoded12, encoded1);
+
+    const res2 = e.decode(encoded13[0..], pubkey, f, i);
+    try testing.expectError(error.PasetoInvalidTokenSignature, res2);
+}

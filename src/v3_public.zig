@@ -166,3 +166,34 @@ test "V3Public fail" {
         try testing.expectEqual(true, need_true);
     }
 }
+
+test "V3Public Decrypt fail" {
+    const key = "02fbcb7c69ee1c60579be7a334134878d9c5c5bf35d552dab63c0140397ed14cef637d7720925c44699ea30e72874c72fb";
+
+    var buf: [49]u8 = undefined;
+    const k_bytes = try std.fmt.hexToBytes(&buf, key);
+
+    const f = "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}";
+    const i = "{\"test-vector\":\"3-S-3\"}";
+
+    const encoded = "7b2264617461223a22746869732069732061207369676e6564206d657373616765222c22657870223a22323032322d30312d30315430303a30303a30302b30303a3030227de128d621b8e64bbef5e468cb4a71e7a49ac2f59f9c9f02b8e5d9af9d5bc24500c208a01768a128a536a35f40ca631d57aabea071375faac70b0806e207878e5bd8e5b7ea0da9d1bc4e3b18122e9a96805f4f31750d77dfff8e6d1659c1ba4117";
+
+    var encoded2: [165]u8 = undefined;
+    const encoded3 = try std.fmt.hexToBytes(&encoded2, encoded);
+
+    const pubkey = try EcdsaP384Sha384.PublicKey.fromSec1(k_bytes[0..]);
+
+    const alloc = testing.allocator;
+    const e = V3Public.init(alloc);
+
+    const res = e.decode(encoded3[0..15], pubkey, f, i);
+    try testing.expectError(error.PasetoIncorrectTokenFormat, res);
+
+    const encoded1 = "7b2264617461223a22746869732069732061207369676e6564206d657373616765222c22657870223a22323032322d30312d30315430303a30303a30302b30303a3030227de128d621b8e64bbef5e468cb4a71e7a49ac2f59f9c9f02b8e5d9af9d5bc24500c208a01768a128a536a35f40ca631d57aabea071375faac70b0806e207812e5bd8e5b7ea0da9d1bc4e3b18122e9a96805f4f31750d77dfff8e6d1659c1ba4117";
+
+    var encoded12: [165]u8 = undefined;
+    const encoded13 = try std.fmt.hexToBytes(&encoded12, encoded1);
+
+    const res2 = e.decode(encoded13[0..], pubkey, f, i);
+    try testing.expectError(error.PasetoInvalidTokenSignature, res2);
+}

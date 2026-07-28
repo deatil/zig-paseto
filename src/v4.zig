@@ -2,8 +2,8 @@ const std = @import("std");
 const fmt = std.fmt;
 const crypto = std.crypto;
 const testing = std.testing;
-const Allocator = std.mem.Allocator;
 const blake2 = std.crypto.hash.blake2;
+const Allocator = std.mem.Allocator;
 
 const utils = @import("utils.zig");
 

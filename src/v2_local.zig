@@ -32,11 +32,11 @@ pub fn EncodeV2Local(comptime name: []const u8) type {
         // PASETO v2 key encrypt primitive.
         // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version2.md#encrypt
         pub fn encode(self: Self, r: std.Random, msg: []const u8, key: []const u8, f: []const u8, i: []const u8) ![]u8 {
+            _ = i;
+
             if (key.len != 32) {
                 return error.PasetoInvalidKeySize;
             }
-
-            _ = i;
 
             // Create random seed
             var rand_nonce: [24]u8 = undefined;
@@ -76,11 +76,11 @@ pub fn EncodeV2Local(comptime name: []const u8) type {
         // PASETO v2 key decrypt primitive.
         // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version2.md#decrypt
         pub fn decode(self: Self, encoded: []const u8, key: []const u8, f: []const u8, i: []const u8) ![]u8 {
+            _ = i;
+
             if (key.len != 32) {
                 return error.PasetoInvalidKeySize;
             }
-
-            _ = i;
 
             const tag_len = XChaCha20Poly1305.tag_length;
             const nonce_length = XChaCha20Poly1305.nonce_length;
@@ -271,4 +271,36 @@ test "V2Local fail" {
         };
         try testing.expectEqual(true, need_true);
     }
+}
+
+test "V2Local Decrypt fail" {
+    const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
+
+    var buf: [32]u8 = undefined;
+    const k = try std.fmt.hexToBytes(&buf, key);
+
+    const f = "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}";
+    const i = "{\"test-vector\":\"2-S-3\"}";
+
+    const encoded = "d9de5bb4903a06d575721f6f31caba28ab38bef6a4a50f0f8b6673b499949a679596a3a7e77f4868dfcee79cc1c0470b5174ac75750a279ba27d7d21a7d4c5aa08665e04114984d224cb4d0f1b9188b5876749e7b31d6cbde3c10f0a52d039e75fc65c316f45afbb1ab4595b56";
+
+    var encoded2: [109]u8 = undefined;
+    const encoded3 = try std.fmt.hexToBytes(&encoded2, encoded);
+
+    const alloc = testing.allocator;
+    const e = V2Local.init(alloc);
+
+    const res = e.decode(encoded3[0..25], k, f, i);
+    try testing.expectError(error.PasetoIncorrectTokenFormat, res);
+
+    const res1 = e.decode(encoded3[0..], k[0..30], f, i);
+    try testing.expectError(error.PasetoInvalidKeySize, res1);
+
+    const encoded1 = "d9de5bb4903a06d575721f6f31caba28ab38bef6a4a50f0f8b6673b499949a679596a3a7e77f4868dfcee79cc1c0470b5174ac75750a279ba27d7d21a7d4c5aa08665e04114984d224cb4d0f1b9188b5876749e7b31d6cbde3c10f0a52d039e75fc65c316f45afbb1ab4592356";
+
+    var encoded12: [149]u8 = undefined;
+    const encoded13 = try std.fmt.hexToBytes(&encoded12, encoded1);
+
+    const res2 = e.decode(encoded13[0..], k, f, i);
+    try testing.expectError(error.PasetoDecryptionFailed, res2);
 }

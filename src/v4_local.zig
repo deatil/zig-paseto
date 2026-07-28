@@ -229,3 +229,27 @@ test "V4Local fail" {
         try testing.expectEqual(true, need_true);
     }
 }
+
+test "V4Local Decrypt fail" {
+    const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
+
+    var buf: [32]u8 = undefined;
+    const k = try std.fmt.hexToBytes(&buf, key);
+
+    const f = "{\"kid\":\"zVhMiPBP9fRf2snEcT7gFTioeA9COcNy9DfgL1W60haN\"}";
+    const i = "{\"test-vector\":\"4-S-3\"}";
+
+    const encoded = "459a60102b02cee79e781177e43a643d53760d972c53a17df4711d499dbc9475215401974dcd3a9018c8e8fc3ca96e18fda7235613b6d5d816b028329d0e76febc639b594d838bcd9fd5d03a6759f5eb11dc827b29abaa2dcf37bc0cf25c16fcc642111e056af2ce52aa10e25a6cdd2013ed2add99ba893b02ccbd4edaf3b8f9bea1de2c13";
+
+    var encoded2: [133]u8 = undefined;
+    const encoded3 = try std.fmt.hexToBytes(&encoded2, encoded);
+
+    const alloc = testing.allocator;
+    const e = V4Local.init(alloc);
+
+    const res = e.decode(encoded3[0..60], k, f, i);
+    try testing.expectError(error.PasetoIncorrectTokenFormat, res);
+
+    const res1 = e.decode(encoded3[0..], k[0..30], f, i);
+    try testing.expectError(error.PasetoInvalidKeySize, res1);
+}
