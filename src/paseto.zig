@@ -150,6 +150,10 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
             return self.alloc.dupe(u8, self.implicit);
         }
 
+        pub fn getEncoder(self: Self) Encoder {
+            return self.encoder;
+        }
+
         // encode paseto token
         pub fn encode(self: *Self, r: std.Random, encode_key: EncodeKeyType) ![]const u8 {
             const encoded = try self.encoder.encode(r, self.message, encode_key, self.footer, self.implicit);

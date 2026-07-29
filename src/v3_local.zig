@@ -164,12 +164,8 @@ test "V3Local fail" {
         const alloc = testing.allocator;
         const e = V3Local.init(alloc);
 
-        var need_true: bool = false;
-        _ = e.decode(encoded3[0..], k, f, i) catch |err| {
-            need_true = true;
-            try testing.expectEqual(error.PasetoInvalidKeySize, err);
-        };
-        try testing.expectEqual(true, need_true);
+        const res = e.decode(encoded3[0..], k, f, i);
+        try testing.expectError(error.PasetoInvalidKeySize, res);
     }
 
     {
@@ -187,12 +183,8 @@ test "V3Local fail" {
 
         var prng = std.Random.DefaultPrng.init(1234);
 
-        var need_true: bool = false;
-        _ = e.encode(prng.random(), msg, k, f, i) catch |err| {
-            need_true = true;
-            try testing.expectEqual(error.PasetoInvalidKeySize, err);
-        };
-        try testing.expectEqual(true, need_true);
+        const res = e.encode(prng.random(), msg, k, f, i);
+        try testing.expectError(error.PasetoInvalidKeySize, res);
     }
 
     {
@@ -212,12 +204,8 @@ test "V3Local fail" {
         const alloc = testing.allocator;
         const e = V3Local.init(alloc);
 
-        var need_true: bool = false;
-        _ = e.decode(encoded3[0..], k, f, i) catch |err| {
-            need_true = true;
-            try testing.expectEqual(error.PasetoInvalidPreAuthenticationHeader, err);
-        };
-        try testing.expectEqual(true, need_true);
+        const res = e.decode(encoded3[0..], k, f, i);
+        try testing.expectError(error.PasetoInvalidPreAuthenticationHeader, res);
     }
 }
 

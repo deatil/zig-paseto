@@ -30,13 +30,6 @@ pub const Token = struct {
         self.reset();
     }
 
-    pub fn reset(self: *Self) void {
-        self.alloc.free(self.raw);
-        self.alloc.free(self.header);
-        self.alloc.free(self.claims);
-        self.alloc.free(self.footer);
-    }
-
     pub fn withHeader(self: *Self, header: []const u8) !void {
         self.alloc.free(self.header);
         self.header = try self.alloc.dupe(u8, header);
@@ -160,6 +153,13 @@ pub const Token = struct {
 
     pub fn getFooterRaw(self: *Self) ![]const u8 {
         return self.alloc.dupe(u8, self.footer);
+    }
+
+    fn reset(self: *Self) void {
+        self.alloc.free(self.raw);
+        self.alloc.free(self.header);
+        self.alloc.free(self.claims);
+        self.alloc.free(self.footer);
     }
 };
 

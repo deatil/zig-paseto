@@ -159,12 +159,8 @@ test "V4Public fail" {
         const alloc = testing.allocator;
         const e = V4Public.init(alloc);
 
-        var need_true: bool = false;
-        _ = e.decode(encoded3[0..], pubkey, f, i) catch |err| {
-            need_true = true;
-            try testing.expectEqual(error.PasetoInvalidTokenSignature, err);
-        };
-        try testing.expectEqual(true, need_true);
+        const res = e.decode(encoded3[0..], pubkey, f, i);
+        try testing.expectError(error.PasetoInvalidTokenSignature, res);
     }
 }
 

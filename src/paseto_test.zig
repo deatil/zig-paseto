@@ -218,12 +218,8 @@ test "V4Local Decrypt fail" {
 
         try p.withImplicit(i);
 
-        var need_true: bool = false;
-        _ = p.decode(token, k) catch |err| {
-            need_true = true;
-            try testing.expectEqual(paseto.Error.PasetoTokAlgoInvalid, err);
-        };
-        try testing.expectEqual(true, need_true);
+        const res = p.decode(token, k);
+        try testing.expectError(paseto.Error.PasetoTokAlgoInvalid, res);
     }
 
     {
@@ -243,12 +239,8 @@ test "V4Local Decrypt fail" {
 
         try p.withImplicit(i);
 
-        var need_true: bool = false;
-        _ = p.decode(token, k) catch |err| {
-            need_true = true;
-            try testing.expectEqual(paseto.Error.PasetoTokenInvalid, err);
-        };
-        try testing.expectEqual(true, need_true);
+        const res = p.decode(token, k);
+        try testing.expectError(paseto.Error.PasetoTokenInvalid, res);
     }
 }
 
@@ -1677,4 +1669,16 @@ test "V2Local Validator" {
     try testing.expectEqual(true, validator.hasBeenIssuedBefore(1567842389));
     try testing.expectEqual(true, validator.isMinimumTimeBefore(1567842389));
     try testing.expectEqual(true, validator.isExpired(1767842389));
+}
+
+test "Paseto getEncoder" {
+    const alloc = testing.allocator;
+
+    var p = paseto.V2Local.init(alloc);
+    defer p.deinit();
+    try testing.expectFmt("v2.local", "{s}", .{p.getEncoder().alg()});
+
+    var p1 = paseto.V3Public.init(alloc);
+    defer p1.deinit();
+    try testing.expectFmt("v3.public", "{s}", .{p1.getEncoder().alg()});
 }
