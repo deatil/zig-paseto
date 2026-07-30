@@ -219,7 +219,7 @@ test "V4Local Decrypt fail" {
         try p.withImplicit(i);
 
         const res = p.decode(token, k);
-        try testing.expectError(paseto.Error.PasetoTokAlgoInvalid, res);
+        try testing.expectError(paseto.Error.PasetoTokenAlgoInvalid, res);
     }
 
     {

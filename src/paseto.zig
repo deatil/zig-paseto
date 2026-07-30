@@ -42,7 +42,7 @@ pub const V4Public = Paseto(v4_public.V4Public, Ed25519.SecretKey, Ed25519.Publi
 
 pub const Error = error{
     PasetoTokenInvalid,
-    PasetoTokAlgoInvalid,
+    PasetoTokenAlgoInvalid,
 };
 
 // jwt claims struct
@@ -193,7 +193,7 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
             if (!utils.eq(header, self.encoder.alg())) {
                 defer t.deinit();
 
-                return Error.PasetoTokAlgoInvalid;
+                return Error.PasetoTokenAlgoInvalid;
             }
 
             const claims = try t.getClaims();
