@@ -16,7 +16,7 @@ pub fn EncodeV3Public(comptime name: []const u8) type {
 
         const Self = @This();
 
-        const public_prefix = "v3.public.";
+        const public_prefix = name ++ ".";
         const encoded_length = EcdsaP384Sha384.Signature.encoded_length;
 
         pub fn init(alloc: Allocator) Self {

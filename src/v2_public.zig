@@ -15,7 +15,7 @@ pub fn EncodeV2Public(comptime name: []const u8) type {
 
         const Self = @This();
 
-        const public_prefix = "v2.public.";
+        const public_prefix = name ++ ".";
         const encoded_length = Ed25519.Signature.encoded_length;
 
         pub fn init(alloc: Allocator) Self {

@@ -16,7 +16,7 @@ pub fn EncodeV2Local(comptime name: []const u8) type {
 
         const Self = @This();
 
-        const local_prefix = "v2.local.";
+        const local_prefix = name ++ ".";
 
         pub fn init(alloc: Allocator) Self {
             return .{

@@ -17,7 +17,7 @@ pub fn EncodeV1Public(comptime name: []const u8) type {
 
         const Self = @This();
 
-        const public_prefix = "v1.public.";
+        const public_prefix = name ++ ".";
 
         pub fn init(alloc: Allocator) Self {
             return .{
