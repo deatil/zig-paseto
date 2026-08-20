@@ -31,7 +31,7 @@ pub fn EncodeV2Public(comptime name: []const u8) type {
 
         // Sign a message (m) with the private key (sk).
         // PASETO v2 public signature primitive.
-        // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version4.md#sign
+        // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version2.md#sign
         pub fn encode(self: Self, r: std.Random, msg: []const u8, key: Ed25519.SecretKey, f: []const u8, i: []const u8) ![]u8 {
             _ = r;
             _ = i;
