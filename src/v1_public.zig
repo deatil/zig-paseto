@@ -34,14 +34,13 @@ pub fn EncodeV1Public(comptime name: []const u8) type {
         // PASETO v1 public signature primitive.
         // https://github.com/paseto-standard/paseto-spec/blob/master/docs/01-Protocol-Versions/Version1.md#sign
         pub fn encode(self: Self, r: std.Random, msg: []const u8, key: rsa.SecretKey, f: []const u8, i: []const u8) ![]u8 {
-            _ = r;
             _ = i;
 
             // Compute pre-authentication message
             const m2 = try utils.preAuthEncoding(self.alloc, &[_][]const u8{ public_prefix, msg, f });
             defer self.alloc.free(m2);
 
-            var signer = RsaPssSha384.Signer.init(key, null);
+            var signer = RsaPssSha384.Signer.init(r, key, null);
             signer.update(m2[0..]);
 
             var buf: [rsa.max_modulus_len]u8 = undefined;
