@@ -3,9 +3,9 @@ const testing = std.testing;
 const crypto = std.crypto;
 const Ed25519 = std.crypto.sign.Ed25519;
 
+const rsa = @import("zig-rsa");
 const paseto = @import("paseto.zig");
 const utils = @import("utils.zig");
-const rsa = @import("rsa/rsa.zig");
 
 const TestRNG = utils.TestRNG;
 

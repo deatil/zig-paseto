@@ -6,7 +6,7 @@ pub const ecdsa = std.crypto.sign.ecdsa;
 pub const Ed25519 = std.crypto.sign.Ed25519;
 pub const EcdsaP384Sha384 = ecdsa.EcdsaP384Sha384;
 
-pub const rsa = @import("rsa/rsa.zig");
+pub const rsa = @import("zig-rsa");
 pub const parser = @import("parser.zig");
 pub const utils = @import("utils.zig");
 pub const Token = @import("token.zig").Token;

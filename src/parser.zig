@@ -5,8 +5,9 @@ const testing = std.testing;
 pub const ecdsa = std.crypto.sign.ecdsa;
 pub const Ed25519 = std.crypto.sign.Ed25519;
 
-pub const der = @import("rsa/der.zig");
-pub const oids = @import("rsa/oid.zig");
+const rsa = @import("zig-rsa");
+pub const der = rsa.der;
+pub const oids = rsa.oids;
 pub const utils = @import("utils.zig");
 
 const oid_ecdsa_publickey = "1.2.840.10045.2.1";

@@ -4,8 +4,8 @@ const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const hash_sha2 = std.crypto.hash.sha2;
 
+pub const rsa = @import("zig-rsa");
 pub const utils = @import("utils.zig");
-pub const rsa = @import("rsa/rsa.zig");
 
 pub const RsaPssSha384 = rsa.Pss(hash_sha2.Sha384);
 
@@ -40,13 +40,13 @@ pub fn EncodeV1Public(comptime name: []const u8) type {
             const m2 = try utils.preAuthEncoding(self.alloc, &[_][]const u8{ public_prefix, msg, f });
             defer self.alloc.free(m2);
 
-            var signer = RsaPssSha384.Signer.init(r, key, null);
+            var signer = RsaPssSha384.Signer.init(self.alloc, r, key, .{});
             signer.update(m2[0..]);
 
-            var buf: [rsa.max_modulus_len]u8 = undefined;
-            const sig = try signer.finalize(&buf);
-
+            const sig = try signer.finalize();
             const signed = sig.toBytes();
+
+            defer self.alloc.free(signed);
 
             // Combine message + sign
             var out = try self.alloc.alloc(u8, msg.len + signed.len);
@@ -81,7 +81,9 @@ pub fn EncodeV1Public(comptime name: []const u8) type {
             defer self.alloc.free(m2);
 
             var sig = RsaPssSha384.Signature.fromBytes(s2[0..]);
-            sig.verify(m2, key, rsa.pss_salt_length_auto) catch {
+            sig.verify(m2, key, .{
+                .salt_leng = rsa.pss_salt_length_auto,
+            }) catch {
                 return error.PasetoInvalidTokenSignature;
             };
 
