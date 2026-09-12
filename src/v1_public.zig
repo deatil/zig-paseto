@@ -81,7 +81,7 @@ pub fn EncodeV1Public(comptime name: []const u8) type {
             defer self.alloc.free(m2);
 
             var sig = RsaPssSha384.Signature.fromBytes(s2[0..]);
-            sig.verify(m2, key, .{
+            sig.verify(self.alloc, m2, key, .{
                 .salt_leng = rsa.pss_salt_length_auto,
             }) catch {
                 return error.PasetoInvalidTokenSignature;
