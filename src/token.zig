@@ -108,16 +108,16 @@ pub const Token = struct {
         }
     }
 
-    pub fn getRaw(self: *Self) ![]const u8 {
+    pub fn getRaw(self: Self) ![]const u8 {
         return self.alloc.dupe(u8, self.raw);
     }
 
-    pub fn getPartCount(self: *Self) usize {
+    pub fn getPartCount(self: Self) usize {
         const count = std.mem.count(u8, self.raw, ".");
         return count + 1;
     }
 
-    pub fn getHeader(self: *Self) !HeaderData {
+    pub fn getHeader(self: Self) !HeaderData {
         var header_ver: []const u8 = "";
         var header_type: []const u8 = "";
 
@@ -135,23 +135,23 @@ pub const Token = struct {
         };
     }
 
-    pub fn getHeaderRaw(self: *Self) ![]const u8 {
+    pub fn getHeaderRaw(self: Self) ![]const u8 {
         return self.alloc.dupe(u8, self.header);
     }
 
-    pub fn getClaims(self: *Self) ![]const u8 {
+    pub fn getClaims(self: Self) ![]const u8 {
         return self.alloc.dupe(u8, self.claims);
     }
 
-    pub fn getFooter(self: *Self) !json.Parsed(json.Value) {
+    pub fn getFooter(self: Self) !json.Parsed(json.Value) {
         return utils.jsonDecode(self.alloc, self.footer);
     }
 
-    pub fn getFooterT(self: *Self, comptime T: type) !json.Parsed(T) {
+    pub fn getFooterT(self: Self, comptime T: type) !json.Parsed(T) {
         return utils.jsonDecodeT(T, self.alloc, self.footer);
     }
 
-    pub fn getFooterRaw(self: *Self) ![]const u8 {
+    pub fn getFooterRaw(self: Self) ![]const u8 {
         return self.alloc.dupe(u8, self.footer);
     }
 

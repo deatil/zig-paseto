@@ -1,12 +1,12 @@
 .{
     .name = .zig_paseto,
-    .version = "1.2.2",
+    .version = "1.2.5",
     .fingerprint = 0xf32aef9aea947384,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .@"zig-rsa" = .{
-            .url = "git+https://github.com/deatil/zig-rsa?ref=main#266ca54ad72e9ff2feb66a14db2900f6f3df5252",
-            .hash = "zig_rsa-0.1.1-JhR-HBE0AwACwe8kSCvjOv3gK2hSV3X0TGUtHM6mGpgQ",
+            .url = "git+https://github.com/deatil/zig-rsa?ref=main#a9bc871c3c0b04a7a6a651ec020c7708da2f6990",
+            .hash = "zig_rsa-0.1.14-JhR-HEt3BABmgEBOCMueJORptBSQxmrJVtd4bMG5RBG7",
         },
     },
     .paths = .{

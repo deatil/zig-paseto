@@ -1,5 +1,6 @@
 const std = @import("std");
 const json = std.json;
+const Random = std.Random;
 const Allocator = std.mem.Allocator;
 
 pub const ecdsa = std.crypto.sign.ecdsa;
@@ -63,20 +64,25 @@ pub const JWTClaims = struct {
     nbf: ?i64 = null,
 };
 
+var prng = Random.DefaultPrng.init(12345678);
+const defaultRandom = prng.random();
+
 pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime DecodeKeyType: type) type {
     return struct {
+        alloc: Allocator,
+        random: Random,
+        encoder: Encoder,
         message: []const u8 = "",
         footer: []const u8 = "",
         implicit: []const u8 = "",
-        encoder: Encoder,
-        alloc: Allocator,
 
         const Self = @This();
 
         pub fn init(alloc: Allocator) Self {
             return .{
-                .encoder = Encoder.init(alloc),
                 .alloc = alloc,
+                .random = defaultRandom,
+                .encoder = Encoder.init(alloc),
             };
         }
 
@@ -88,6 +94,10 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
 
         pub fn alg(self: Self) []const u8 {
             return self.encoder.alg();
+        }
+
+        pub fn withRandom(self: *Self, random: Random) void {
+            self.random = random;
         }
 
         pub fn withMessage(self: *Self, message: []const u8) !void {
@@ -114,39 +124,39 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
             self.implicit = try utils.jsonEncode(self.alloc, implicit);
         }
 
-        pub fn getMessage(self: *Self) !json.Parsed(json.Value) {
+        pub fn getMessage(self: Self) !json.Parsed(json.Value) {
             return utils.jsonDecode(self.alloc, self.message);
         }
 
-        pub fn getMessageT(self: *Self, comptime T: type) !json.Parsed(T) {
+        pub fn getMessageT(self: Self, comptime T: type) !json.Parsed(T) {
             return utils.jsonDecodeT(T, self.alloc, self.message);
         }
 
-        pub fn getMessageRaw(self: *Self) ![]const u8 {
+        pub fn getMessageRaw(self: Self) ![]const u8 {
             return self.alloc.dupe(u8, self.message);
         }
 
-        pub fn getFooter(self: *Self) !json.Parsed(json.Value) {
+        pub fn getFooter(self: Self) !json.Parsed(json.Value) {
             return utils.jsonDecode(self.alloc, self.footer);
         }
 
-        pub fn getFooterT(self: *Self, comptime T: type) !json.Parsed(T) {
+        pub fn getFooterT(self: Self, comptime T: type) !json.Parsed(T) {
             return utils.jsonDecodeT(T, self.alloc, self.footer);
         }
 
-        pub fn getFooterRaw(self: *Self) ![]const u8 {
+        pub fn getFooterRaw(self: Self) ![]const u8 {
             return self.alloc.dupe(u8, self.footer);
         }
 
-        pub fn getImplicit(self: *Self) !json.Parsed(json.Value) {
+        pub fn getImplicit(self: Self) !json.Parsed(json.Value) {
             return utils.jsonDecode(self.alloc, self.implicit);
         }
 
-        pub fn getImplicitT(self: *Self, comptime T: type) !json.Parsed(T) {
+        pub fn getImplicitT(self: Self, comptime T: type) !json.Parsed(T) {
             return utils.jsonDecodeT(T, self.alloc, self.implicit);
         }
 
-        pub fn getImplicitRaw(self: *Self) ![]const u8 {
+        pub fn getImplicitRaw(self: Self) ![]const u8 {
             return self.alloc.dupe(u8, self.implicit);
         }
 
@@ -155,8 +165,8 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
         }
 
         // encode paseto token
-        pub fn encode(self: *Self, r: std.Random, encode_key: EncodeKeyType) ![]const u8 {
-            const encoded = try self.encoder.encode(r, self.message, encode_key, self.footer, self.implicit);
+        pub fn encode(self: *Self, encode_key: EncodeKeyType) ![]const u8 {
+            const encoded = try self.encoder.encode(self.random, self.message, encode_key, self.footer, self.implicit);
             defer self.alloc.free(encoded);
 
             var t = Token.init(self.alloc);
@@ -214,7 +224,7 @@ pub fn Paseto(comptime Encoder: type, comptime EncodeKeyType: type, comptime Dec
         }
 
         // validator message
-        pub fn validator(self: *Self) !Validator {
+        pub fn validator(self: Self) !Validator {
             const msg = try self.getMessage();
 
             return Validator.init(msg, .{});

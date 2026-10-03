@@ -1,6 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 const crypto = std.crypto;
+const Random = std.Random;
 const Ed25519 = std.crypto.sign.Ed25519;
 
 const rsa = @import("zig-rsa");
@@ -8,6 +9,10 @@ const paseto = @import("paseto.zig");
 const utils = @import("utils.zig");
 
 const TestRNG = utils.TestRNG;
+
+const random = (Random.IoSource{
+    .io = testing.io,
+}).interface();
 
 test "V4Local EncryptDecrypt" {
     const key = "707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f";
@@ -28,9 +33,9 @@ test "V4Local EncryptDecrypt" {
     try e.withFooter(f);
     try e.withImplicit(i);
 
-    var prng = std.Random.DefaultPrng.init(1234);
+    e.withRandom(random);
 
-    const token = try e.encode(prng.random(), k);
+    const token = try e.encode(k);
     defer alloc.free(token);
 
     // ==================
@@ -121,9 +126,9 @@ test "V4Local EncryptDecrypt Use Set" {
     try e.setFooter(f);
     try e.setImplicit(i);
 
-    var prng = std.Random.DefaultPrng.init(1234);
+    e.withRandom(random);
 
-    const token = try e.encode(prng.random(), k);
+    const token = try e.encode(k);
     defer alloc.free(token);
 
     // ==================
@@ -269,8 +274,10 @@ fn testV4LocalVectorT(comptime nonce: []const u8) type {
             try e.withMessage(payload);
             try e.withFooter(footer);
             try e.withImplicit(implicit_assertion);
+            
+            e.withRandom(test_rng);
 
-            const encoded = try e.encode(test_rng, k);
+            const encoded = try e.encode(k);
             defer alloc.free(encoded);
 
             try testing.expectFmt(token, "{s}", .{encoded});
@@ -384,9 +391,7 @@ test "V4Public EncryptDecrypt" {
     try e.withFooter(f);
     try e.withImplicit(i);
 
-    var prng = std.Random.DefaultPrng.init(1234);
-
-    const token = try e.encode(prng.random(), kp.secret_key);
+    const token = try e.encode(kp.secret_key);
     defer alloc.free(token);
 
     // ==================
@@ -437,9 +442,7 @@ fn testV4PublicVector(
     try e.withFooter(footer);
     try e.withImplicit(implicit_assertion);
 
-    var prng = std.Random.DefaultPrng.init(1234);
-
-    const encoded = try e.encode(prng.random(), sk);
+    const encoded = try e.encode(sk);
     defer alloc.free(encoded);
 
     try testing.expectFmt(token, "{s}", .{encoded});
@@ -512,9 +515,9 @@ test "V3Local EncryptDecrypt" {
     try e.withFooter(f);
     try e.withImplicit(i);
 
-    var prng = std.Random.DefaultPrng.init(1234);
+    e.withRandom(random);
 
-    const token = try e.encode(prng.random(), k);
+    const token = try e.encode(k);
     defer alloc.free(token);
 
     // ==================
@@ -557,7 +560,9 @@ fn testV3LocalVectorT(comptime nonce: []const u8) type {
             try e.withFooter(footer);
             try e.withImplicit(implicit_assertion);
 
-            const encoded = try e.encode(test_rng, k);
+            e.withRandom(test_rng);
+
+            const encoded = try e.encode(k);
             defer alloc.free(encoded);
 
             try testing.expectFmt(token, "{s}", .{encoded});
@@ -671,9 +676,7 @@ test "V3Public EncryptDecrypt" {
     try e.withFooter(f);
     try e.withImplicit(i);
 
-    var prng = std.Random.DefaultPrng.init(1234);
-
-    const token = try e.encode(prng.random(), kp.secret_key);
+    const token = try e.encode(kp.secret_key);
     defer alloc.free(token);
 
     // ==================
@@ -724,9 +727,7 @@ fn testV3PublicVector(
     try e.withFooter(footer);
     try e.withImplicit(implicit_assertion);
 
-    var prng = std.Random.DefaultPrng.init(1234);
-
-    const encoded = try e.encode(prng.random(), sk);
+    const encoded = try e.encode(sk);
     defer alloc.free(encoded);
 
     try testing.expectEqual(true, encoded.len > 0);
@@ -801,9 +802,7 @@ test "V3Public EncryptDecrypt with der key" {
     try e.withFooter(f);
     try e.withImplicit(i);
 
-    var prng = std.Random.DefaultPrng.init(1234);
-
-    const token = try e.encode(prng.random(), secret_key);
+    const token = try e.encode(secret_key);
     defer alloc.free(token);
 
     // ==================
@@ -841,9 +840,9 @@ test "V2Local EncryptDecrypt" {
     try e.withFooter(f);
     try e.withImplicit(i);
 
-    var prng = std.Random.DefaultPrng.init(1234);
+    e.withRandom(random);
 
-    const token = try e.encode(prng.random(), k);
+    const token = try e.encode(k);
     defer alloc.free(token);
 
     // ==================
@@ -884,7 +883,9 @@ fn testV2LocalVectorT(comptime nonce: []const u8) type {
             try e.withMessage(payload);
             try e.withFooter(footer);
 
-            const encoded = try e.encode(test_rng, k);
+            e.withRandom(test_rng);
+
+            const encoded = try e.encode(k);
             defer alloc.free(encoded);
 
             try testing.expectFmt(token, "{s}", .{encoded});
@@ -1007,9 +1008,7 @@ test "V2Public EncryptDecrypt" {
     try e.withFooter(f);
     try e.withImplicit(i);
 
-    var prng = std.Random.DefaultPrng.init(1234);
-
-    const token = try e.encode(prng.random(), kp.secret_key);
+    const token = try e.encode(kp.secret_key);
     defer alloc.free(token);
 
     // ==================
@@ -1052,9 +1051,7 @@ fn testV2PublicVector(
     try e.withMessage(payload);
     try e.withFooter(footer);
 
-    var prng = std.Random.DefaultPrng.init(1234);
-
-    const encoded = try e.encode(prng.random(), prikey);
+    const encoded = try e.encode(prikey);
     defer alloc.free(encoded);
 
     try testing.expectFmt(token, "{s}", .{encoded});
@@ -1142,9 +1139,7 @@ test "V2Public EncryptDecrypt with der key" {
     try e.withFooter(f);
     try e.withImplicit(i);
 
-    var prng = std.Random.DefaultPrng.init(1234);
-
-    const token = try e.encode(prng.random(), secret_key);
+    const token = try e.encode(secret_key);
     defer alloc.free(token);
 
     // ==================
@@ -1182,9 +1177,9 @@ test "V1Local EncryptDecrypt" {
     try e.withFooter(f);
     try e.withImplicit(i);
 
-    var prng = std.Random.DefaultPrng.init(1234);
+    e.withRandom(random);
 
-    const token = try e.encode(prng.random(), k);
+    const token = try e.encode(k);
     defer alloc.free(token);
 
     // ==================
@@ -1225,7 +1220,9 @@ fn testV1LocalVectorT(comptime nonce: []const u8) type {
             try e.withMessage(payload);
             try e.withFooter(footer);
 
-            const encoded = try e.encode(test_rng, k);
+            e.withRandom(test_rng);
+
+            const encoded = try e.encode(k);
             defer alloc.free(encoded);
 
             try testing.expectFmt(token, "{s}", .{encoded});
@@ -1412,9 +1409,9 @@ test "V1Public EncryptDecrypt" {
     try e.withFooter(f);
     try e.withImplicit(i);
 
-    var prng = std.Random.DefaultPrng.init(1234);
+    e.withRandom(random);
 
-    const token = try e.encode(prng.random(), secret_key);
+    const token = try e.encode(secret_key);
     defer alloc.free(token);
 
     // ==================
@@ -1459,9 +1456,9 @@ fn testV1PublicVector(
     try e.withMessage(payload);
     try e.withFooter(footer);
 
-    var prng = std.Random.DefaultPrng.init(1234);
+    e.withRandom(random);
 
-    const encoded = try e.encode(prng.random(), prikey);
+    const encoded = try e.encode(prikey);
     defer alloc.free(encoded);
 
     try testing.expectEqual(true, encoded.len > 0);
@@ -1633,9 +1630,9 @@ test "V2Local Validator" {
     try e.withFooter(f);
     try e.withImplicit(i);
 
-    var prng = std.Random.DefaultPrng.init(1234);
+    e.withRandom(random);
 
-    const token = try e.encode(prng.random(), k);
+    const token = try e.encode(k);
     defer alloc.free(token);
 
     // ==================
