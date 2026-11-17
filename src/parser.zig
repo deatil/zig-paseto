@@ -1,9 +1,12 @@
 const std = @import("std");
 const fmt = std.fmt;
 const testing = std.testing;
+const Allocator = std.mem.Allocator;
 
 pub const ecdsa = std.crypto.sign.ecdsa;
 pub const Ed25519 = std.crypto.sign.Ed25519;
+
+const zpem = @import("zpem");
 
 const rsa = @import("zig-rsa");
 pub const der = rsa.der;
@@ -11,16 +14,9 @@ pub const oids = rsa.oids;
 pub const utils = @import("utils.zig");
 
 const oid_ecdsa_publickey = "1.2.840.10045.2.1";
-const oid_ecdsa_p256_namedcurve = "1.2.840.10045.3.1.7";
 const oid_ecdsa_p384_namedcurve = "1.3.132.0.34";
-const oid_ecdsa_p521_namedcurve = "1.3.132.0.35";
-const oid_ecdsa_s256_namedcurve = "1.3.132.0.10";
 
-pub const ParseEcdsaP256Sha256Der = ParseEcdsaKeyDer(ecdsa.EcdsaP256Sha256, CheckEcdsaOid(oid_ecdsa_p256_namedcurve));
-pub const ParseEcdsaP384Sha384Der = ParseEcdsaKeyDer(ecdsa.EcdsaP384Sha384, CheckEcdsaOid(oid_ecdsa_p384_namedcurve));
-// pub const ParseEcdsaP521Sha512Der = ParseEcdsaKeyDer(ecdsa.EcdsaP521Sha512, CheckEcdsaOid(oid_ecdsa_p521_namedcurve));
-
-pub const ParseEcdsaSecp256k1Sha256Der = ParseEcdsaKeyDer(ecdsa.EcdsaSecp256k1Sha256, CheckEcdsaOid(oid_ecdsa_s256_namedcurve));
+pub const ParseEcdsaP384Sha384Key = ParseEcdsaKey(ecdsa.EcdsaP384Sha384, CheckEcdsaOid(oid_ecdsa_p384_namedcurve));
 
 /// check ECDSA namedcurve OID
 pub fn CheckEcdsaOid(comptime namedcurve_oid: []const u8) type {
@@ -34,10 +30,54 @@ pub fn CheckEcdsaOid(comptime namedcurve_oid: []const u8) type {
     };
 }
 
-// parse ECDSA der key
-pub fn ParseEcdsaKeyDer(comptime EC: type, comptime CheckOidFn: type) type {
+// parse ECDSA key from der bytes or pem string
+pub fn ParseEcdsaKey(comptime EC: type, comptime CheckOidFn: type) type {
     return struct {
         const Self = @This();
+
+        pub fn parsePublicKeyPEM(alloc: Allocator, str: []const u8) !EC.PublicKey {
+            var p = try zpem.decode(alloc, str);
+            defer p.deinit();
+
+            const bytes = try p.getBytes();
+            defer alloc.free(bytes);
+
+            const k = try parsePublicKeyDer(bytes);
+            return k;
+        }
+
+        pub fn parseSecretKeyPEM(alloc: Allocator, str: []const u8) !EC.SecretKey {
+            var p = try zpem.decode(alloc, str);
+            defer p.deinit();
+
+            const bytes = try p.getBytes();
+            defer alloc.free(bytes);
+
+            const k = try parseSecretKeyDer(bytes);
+            return k;
+        }
+
+        pub fn parseSecretKeyPKCS8PEM(alloc: Allocator, str: []const u8) !EC.SecretKey {
+            var p = try zpem.decode(alloc, str);
+            defer p.deinit();
+
+            const bytes = try p.getBytes();
+            defer alloc.free(bytes);
+
+            const k = try parseSecretKeyPKCS8Der(bytes);
+            return k;
+        }
+
+        pub fn parseSecretKeyPEMAuto(alloc: Allocator, str: []const u8) !EC.SecretKey {
+            var p = try zpem.decode(alloc, str);
+            defer p.deinit();
+
+            const bytes = try p.getBytes();
+            defer alloc.free(bytes);
+
+            const k = try parseSecretKeyDerAuto(bytes);
+            return k;
+        }
 
         pub fn parsePublicKeyDer(bytes: []const u8) !EC.PublicKey {
             var parser = der.Parser{ .bytes = bytes };
@@ -155,12 +195,34 @@ fn checkECDSAPublickeyNamedCurveOid(oid: []const u8, namedcurve_oid: []const u8)
 
 const oid_eddsa_publickey = "1.3.101.112";
 
-pub const ParseEddsaDer = ParseEdDSAKeyDer(Ed25519);
+pub const ParseEddsaKey = ParseEdDSAKey(Ed25519);
 
-// parse EdDSA der key
-pub fn ParseEdDSAKeyDer(comptime ED: type) type {
+// parse EdDSA key
+pub fn ParseEdDSAKey(comptime ED: type) type {
     return struct {
         const Self = @This();
+
+        pub fn parseSecretKeyPEM(alloc: Allocator, str: []const u8) !ED.SecretKey {
+            var p = try zpem.decode(alloc, str);
+            defer p.deinit();
+
+            const bytes = try p.getBytes();
+            defer alloc.free(bytes);
+
+            const k = try parseSecretKeyDer(bytes);
+            return k;
+        }
+
+        pub fn parsePublicKeyPEM(alloc: Allocator, str: []const u8) !ED.PublicKey {
+            var p = try zpem.decode(alloc, str);
+            defer p.deinit();
+
+            const bytes = try p.getBytes();
+            defer alloc.free(bytes);
+
+            const k = try parsePublicKeyDer(bytes);
+            return k;
+        }
 
         pub fn parseSecretKeyDer(bytes: []const u8) !ED.SecretKey {
             var parser = der.Parser{ .bytes = bytes };
@@ -232,6 +294,76 @@ fn checkEdDSAPublickeyOid(oid: []const u8) !void {
     return;
 }
 
+// ===========================
+
+pub const ParseRSAKey = struct {
+    pub fn parseSecretKeyPEM(alloc: Allocator, str: []const u8) !rsa.SecretKey {
+        var p = try zpem.decode(alloc, str);
+        defer p.deinit();
+
+        const bytes = try p.getBytes();
+        defer alloc.free(bytes);
+
+        const k = try rsa.SecretKey.fromDer(alloc, bytes);
+        return k;
+    }
+
+    pub fn parsePublicKeyPEM(alloc: Allocator, str: []const u8) !rsa.PublicKey {
+        var p = try zpem.decode(alloc, str);
+        defer p.deinit();
+
+        const bytes = try p.getBytes();
+        defer alloc.free(bytes);
+
+        const k = try rsa.PublicKey.fromDer(bytes);
+        return k;
+    }
+
+    pub fn parseSecretKeyPKCS8PEM(alloc: Allocator, str: []const u8) !rsa.SecretKey {
+        var p = try zpem.decode(alloc, str);
+        defer p.deinit();
+
+        const bytes = try p.getBytes();
+        defer alloc.free(bytes);
+
+        const k = try rsa.SecretKey.fromPKCS8Der(alloc, bytes);
+        return k;
+    }
+
+    pub fn parsePublicKeyPKCS8PEM(alloc: Allocator, str: []const u8) !rsa.PublicKey {
+        var p = try zpem.decode(alloc, str);
+        defer p.deinit();
+
+        const bytes = try p.getBytes();
+        defer alloc.free(bytes);
+
+        const k = try rsa.PublicKey.fromPKCS8Der(bytes);
+        return k;
+    }
+
+    pub fn parseSecretKeyPEMAuto(alloc: Allocator, str: []const u8) !rsa.SecretKey {
+        var p = try zpem.decode(alloc, str);
+        defer p.deinit();
+
+        const bytes = try p.getBytes();
+        defer alloc.free(bytes);
+
+        const k = try rsa.SecretKey.fromDerAuto(alloc, bytes);
+        return k;
+    }
+
+    pub fn parsePublicKeyPEMAuto(alloc: Allocator, str: []const u8) !rsa.PublicKey {
+        var p = try zpem.decode(alloc, str);
+        defer p.deinit();
+
+        const bytes = try p.getBytes();
+        defer alloc.free(bytes);
+
+        const k = try rsa.PublicKey.fromDerAuto(bytes);
+        return k;
+    }
+};
+
 test "ecdsa" {
     const alloc = testing.allocator;
 
@@ -244,8 +376,8 @@ test "ecdsa" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try ParseEcdsaP384Sha384Der.parseSecretKeyDer(prikey_bytes);
-    const public_key = try ParseEcdsaP384Sha384Der.parsePublicKeyDer(pubkey_bytes);
+    const secret_key = try ParseEcdsaP384Sha384Key.parseSecretKeyDer(prikey_bytes);
+    const public_key = try ParseEcdsaP384Sha384Key.parsePublicKeyDer(pubkey_bytes);
 
     const msg = "test-data";
 
@@ -272,8 +404,8 @@ test "eddsa" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try ParseEddsaDer.parseSecretKeyDer(prikey_bytes);
-    const public_key = try ParseEddsaDer.parsePublicKeyDer(pubkey_bytes);
+    const secret_key = try ParseEddsaKey.parseSecretKeyDer(prikey_bytes);
+    const public_key = try ParseEddsaKey.parsePublicKeyDer(pubkey_bytes);
 
     const msg = "test-data";
 

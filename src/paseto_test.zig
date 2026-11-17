@@ -792,8 +792,109 @@ test "V3Public EncryptDecrypt with der key" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try paseto.parser.ParseEcdsaP384Sha384Der.parseSecretKeyDer(prikey_bytes);
-    const public_key = try paseto.parser.ParseEcdsaP384Sha384Der.parsePublicKeyDer(pubkey_bytes);
+    const secret_key = try paseto.parser.ParseEcdsaP384Sha384Key.parseSecretKeyDer(prikey_bytes);
+    const public_key = try paseto.parser.ParseEcdsaP384Sha384Key.parsePublicKeyDer(pubkey_bytes);
+
+    var e = paseto.V3Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    const token = try e.encode(secret_key);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V3Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, public_key);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+    
+test "V3Public EncryptDecrypt with pem key" {
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}";
+    const i = "{\"test-vector\":\"3-S-3\"}";
+
+    const alloc = testing.allocator;
+
+    const prikey = 
+        \\-----BEGIN EC PRIVATE KEY-----
+        \\MIGkAgEBBDCKkU3/bJJS2nV+u4FSgCLgcaNaDnyB7sEEhXvCLf4DJiLWplxb/lNd
+        \\HKtEVbx828OgBwYFK4EEACKhZANiAATOXjuGfhl/4JylsxuaEw4fxIOXle0hJD1A
+        \\JODcC8e3KJSMG5MGhKLQPvo2IZAd9IK7byRArzegzwtMjAnGzE9oIXnCm7JczuyX
+        \\4sRPoL8d+RNtc7ZVjEL/srgTWohWA3s=
+        \\-----END EC PRIVATE KEY-----
+        ;
+    const pubkey = 
+        \\-----BEGIN PUBLIC KEY-----
+        \\MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEzl47hn4Zf+CcpbMbmhMOH8SDl5XtISQ9
+        \\QCTg3AvHtyiUjBuTBoSi0D76NiGQHfSCu28kQK83oM8LTIwJxsxPaCF5wpuyXM7s
+        \\l+LET6C/HfkTbXO2VYxC/7K4E1qIVgN7
+        \\-----END PUBLIC KEY-----
+        ;
+
+    const secret_key = try paseto.parser.ParseEcdsaP384Sha384Key.parseSecretKeyPEM(alloc, prikey);
+    const public_key = try paseto.parser.ParseEcdsaP384Sha384Key.parsePublicKeyPEM(alloc, pubkey);
+
+    var e = paseto.V3Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    const token = try e.encode(secret_key);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V3Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, public_key);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+test "V3Public EncryptDecrypt with PKCS8 pem key" {
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}";
+    const i = "{\"test-vector\":\"3-S-3\"}";
+
+    const alloc = testing.allocator;
+
+    const prikey = 
+        \\-----BEGIN PRIVATE KEY-----
+        \\MIG/AgEAMBAGByqGSM49AgEGBSuBBAAiBIGnMIGkAgEBBDCKkU3/bJJS2nV+u4FS
+        \\gCLgcaNaDnyB7sEEhXvCLf4DJiLWplxb/lNdHKtEVbx828OgBwYFK4EEACKhZANi
+        \\AATOXjuGfhl/4JylsxuaEw4fxIOXle0hJD1AJODcC8e3KJSMG5MGhKLQPvo2IZAd
+        \\9IK7byRArzegzwtMjAnGzE9oIXnCm7JczuyX4sRPoL8d+RNtc7ZVjEL/srgTWohW
+        \\A3s=
+        \\-----END PRIVATE KEY-----
+        ;
+    const pubkey = 
+        \\-----BEGIN PUBLIC KEY-----
+        \\MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEzl47hn4Zf+CcpbMbmhMOH8SDl5XtISQ9
+        \\QCTg3AvHtyiUjBuTBoSi0D76NiGQHfSCu28kQK83oM8LTIwJxsxPaCF5wpuyXM7s
+        \\l+LET6C/HfkTbXO2VYxC/7K4E1qIVgN7
+        \\-----END PUBLIC KEY-----
+        ;
+
+    const secret_key = try paseto.parser.ParseEcdsaP384Sha384Key.parseSecretKeyPKCS8PEM(alloc, prikey);
+    const public_key = try paseto.parser.ParseEcdsaP384Sha384Key.parsePublicKeyPEM(alloc, pubkey);
 
     var e = paseto.V3Public.init(alloc);
     defer e.deinit();
@@ -1129,8 +1230,53 @@ test "V2Public EncryptDecrypt with der key" {
     defer alloc.free(prikey_bytes);
     defer alloc.free(pubkey_bytes);
 
-    const secret_key = try paseto.parser.ParseEddsaDer.parseSecretKeyDer(prikey_bytes);
-    const public_key = try paseto.parser.ParseEddsaDer.parsePublicKeyDer(pubkey_bytes);
+    const secret_key = try paseto.parser.ParseEddsaKey.parseSecretKeyDer(prikey_bytes);
+    const public_key = try paseto.parser.ParseEddsaKey.parsePublicKeyDer(pubkey_bytes);
+
+    var e = paseto.V2Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    const token = try e.encode(secret_key);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V2Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, public_key);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+test "V2Public EncryptDecrypt with pem key" {
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}";
+    const i = "{\"test-vector\":\"2-S-3\"}";
+
+    const alloc = testing.allocator;
+
+    const prikey = 
+        \\-----BEGIN PRIVATE KEY-----
+        \\MC4CAQAwBQYDK2VwBCIEIK3jWwBPmk1J4dynA3CjSfOLP9seazHZYZ6MCqCU+n0f
+        \\-----END PRIVATE KEY-----
+        ;
+    const pubkey = 
+        \\-----BEGIN PUBLIC KEY-----
+        \\MCowBQYDK2VwAyEAj/CWF9RnNKe/L0jHWHpUICXDowaNYLbj7Ck/wdzTvE4=
+        \\-----END PUBLIC KEY-----
+        ;
+
+    const secret_key = try paseto.parser.ParseEddsaKey.parseSecretKeyPEM(alloc, prikey);
+    const public_key = try paseto.parser.ParseEddsaKey.parsePublicKeyPEM(alloc, pubkey);
 
     var e = paseto.V2Public.init(alloc);
     defer e.deinit();
@@ -1399,6 +1545,210 @@ test "V1Public EncryptDecrypt" {
 
     var secret_key = try rsa.SecretKey.fromDer(alloc, prikey_bytes);
     const public_key = try rsa.PublicKey.fromDer(pubkey_bytes);
+
+    defer secret_key.deinit(alloc);
+
+    var e = paseto.V1Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    e.withRandom(random);
+
+    const token = try e.encode(secret_key);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V1Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, public_key);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+test "V1Public EncryptDecrypt with pem key" {
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}";
+    const i = "{\"test-vector\":\"2-S-3\"}";
+
+    const alloc = testing.allocator;
+
+    const prikey = 
+        \\-----BEGIN PRIVATE KEY-----
+        \\MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8R
+        \\DtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAa
+        \\hlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2
+        \\BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBST
+        \\AGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHce
+        \\Abewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAo
+        \\IBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+
+        \\O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReF
+        \\MRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr
+        \\+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrH
+        \\zOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgv
+        \\lnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7
+        \\X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2
+        \\wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLS
+        \\slHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOS
+        \\f/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbB
+        \\ULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJ
+        \\A7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq
+        \\-----END PRIVATE KEY-----
+        ;
+    const pubkey = 
+        \\-----BEGIN PUBLIC KEY-----
+        \\MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5q
+        \\LaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB
+        \\-----END PUBLIC KEY-----
+        ;
+
+    var secret_key = try paseto.parser.ParseRSAKey.parseSecretKeyPEM(alloc, prikey);
+    const public_key = try paseto.parser.ParseRSAKey.parsePublicKeyPEM(alloc, pubkey);
+
+    defer secret_key.deinit(alloc);
+
+    var e = paseto.V1Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    e.withRandom(random);
+
+    const token = try e.encode(secret_key);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V1Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, public_key);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+test "V1Public EncryptDecrypt with pkcs8 pem key" {
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}";
+    const i = "{\"test-vector\":\"2-S-3\"}";
+
+    const alloc = testing.allocator;
+
+    const prikey = 
+        \\-----BEGIN PRIVATE KEY-----
+        \\MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDh/nCDmXaEqxN416b9XjV8acmbqA52uPzKbesWQRT/BPxEO2dKAURk5CkcSBDskvfzFR9TRjeDppjD1BPSEnuYKnP0SvmotoxcnBnHMfMBqGV8DSJyppu8k4y9C3MPq5C/rA8TJm0NNaJCL0BfAGkeyw+elgYifbRlm42VfYGsKVyIeEI9Qghk5Cf8yapMPfWNLKOhChXsyGExMBMonHZeseFH7UNwonNAFJMAaelhVqqmwBFqn6fBGKmvedRO7HIaiEFNKaMna6xJ5Bccjds4MhF7UC5PIdx4Bt7CfxvjrbIRYoBF2l30CNBblIhU992zPkHoaVhDkt1gq3OdO7LvAgMBAAECggEBALCJrWTv7ahnZ3efpqAIBuogTVBd8KaHjVmokds5jehFAbdfXClwYfgaT477MNVNXYmzN1w63sTl0DIxqiYRMCFHEHuGUg6cQ3tYqb50Y2spG9XTANTlF4UxEeDfX8ue7xz7kG8aNlf6TL084iEUVgmrAJGWikZJQjGZWPmtKC3OTeJY5Bev5qHVuMRe+XEM5aQc3ph+lXlOF0Qp0Eg8YRWprrev2faH6prMqu2JGomoac6sfM4QJhtEViF7Gw0XPthPTbF19IefuAwi9psMM/9CnQ+MTWN2i6IxoUdicsFuC+Wdlb3K5V/+uldNSr+ePEhcya+YTLK9IOcVwWKQHykCgYEA8XvuEribf+t0ZPtfxr+DC9nZHXbVoFx0/ARpSG+P/fp3Hn3rO9iYQ6OtZ9mEXTzf+dhYTaRWq6PbCOz6i0It+J8QSBdxU9OcQ4871mDe41IvSc1CCGMW4PeIYtNQEK0zrqhN7SMtKyUd7yAsYRCrIzMc7NjE2qJvFw5kh7xC3Q0CgYEA75Qjn5daNYSAOa/ILdOs5J/8oIaO27RNK/fSKm/btsMsyum8+YP/mWmm1MXBzG9WEKzZv5yEKOWCEVJYVsFQsGt9yLYW2WIKU5UxiuU0F1RImF/dphIbYOh7oGC3WfYKk2f+K7ftjc196ZkEkDuE2Xh1h75/67Mzztx1DbXj6OsCgYBcDRfFfyWXb5Og4smxo1M680H2H1RzmorlfnD7sbs733wE3Y8L8xanwf7Z9WqleA0Q2k1e22RGbWGTV3JyHzoS6d90+6qxf5qzjigLIkYUdUGdambfd5ZDD1ioA1Ej6kInM/TwjlYreiyc+LCyF36FHnjKOB9iEEU0jsH3k+YRCQKBgHMVLPuHX6zfhhyvxK/Gw4FbHKYbnNoKxRs+wvThoKAtJwIdv0n4TzppVttUV2CVhrkh3sM9MvrWLGGXtZmO6Oyl5dkZJuarQpydyRuYOCqQsQKI4lbY0c/+PQxwCQMsvi3KwXxMsM7yC+6/M0L5ZDp2s7ZOGvKktVlD6vJ4Eg+bAoGARnGGprSBW8dAb/s53r0paPh4k/bySrXdGEprLwk6g3S8+aylcmjUdjcIq4dEb4A/nv12dx1Sc4y99c62R0zi+TT6FYBIFDMz3HNVzO0Jr6SgC6CNVotL0D725CioR5U1NyTHHRLZth69HLuEZCZQlPJCbePXMRRHmOl1svzcVuo=
+        \\-----END PRIVATE KEY-----
+        ;
+    const pubkey = 
+        \\-----BEGIN PUBLIC KEY-----
+        \\MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB
+        \\-----END PUBLIC KEY-----
+        ;
+
+    var secret_key = try paseto.parser.ParseRSAKey.parseSecretKeyPKCS8PEM(alloc, prikey);
+    const public_key = try paseto.parser.ParseRSAKey.parsePublicKeyPKCS8PEM(alloc, pubkey);
+
+    defer secret_key.deinit(alloc);
+
+    var e = paseto.V1Public.init(alloc);
+    defer e.deinit();
+
+    try e.withMessage(m);
+    try e.withFooter(f);
+    try e.withImplicit(i);
+
+    e.withRandom(random);
+
+    const token = try e.encode(secret_key);
+    defer alloc.free(token);
+
+    // ==================
+
+    var p = paseto.V1Public.init(alloc);
+    defer p.deinit();
+
+    try p.withImplicit(i);
+
+    try p.decode(token, public_key);
+
+    try testing.expectFmt(m, "{s}", .{p.message});
+    try testing.expectFmt(f, "{s}", .{p.footer});
+    try testing.expectFmt(i, "{s}", .{p.implicit});
+}
+
+test "V1Public EncryptDecrypt with pem key auto" {
+    {
+        const prikey = 
+            \\-----BEGIN PRIVATE KEY-----
+            \\MIIEowIBAAKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8R
+            \\DtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAa
+            \\hlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2
+            \\BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBST
+            \\AGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHce
+            \\Abewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQABAo
+            \\IBAQCwia1k7+2oZ2d3n6agCAbqIE1QXfCmh41ZqJHbOY3oRQG3X1wpcGH4Gk+
+            \\O+zDVTV2JszdcOt7E5dAyMaomETAhRxB7hlIOnEN7WKm+dGNrKRvV0wDU5ReF
+            \\MRHg31/Lnu8c+5BvGjZX+ky9POIhFFYJqwCRlopGSUIxmVj5rSgtzk3iWOQXr
+            \\+ah1bjEXvlxDOWkHN6YfpV5ThdEKdBIPGEVqa63r9n2h+qazKrtiRqJqGnOrH
+            \\zOECYbRFYhexsNFz7YT02xdfSHn7gMIvabDDP/Qp0PjE1jdouiMaFHYnLBbgv
+            \\lnZW9yuVf/rpXTUq/njxIXMmvmEyyvSDnFcFikB8pAoGBAPF77hK4m3/rdGT7
+            \\X8a/gwvZ2R121aBcdPwEaUhvj/36dx596zvYmEOjrWfZhF083/nYWE2kVquj2
+            \\wjs+otCLfifEEgXcVPTnEOPO9Zg3uNSL0nNQghjFuD3iGLTUBCtM66oTe0jLS
+            \\slHe8gLGEQqyMzHOzYxNqibxcOZIe8Qt0NAoGBAO+UI5+XWjWEgDmvyC3TrOS
+            \\f/KCGjtu0TSv30ipv27bDLMrpvPmD/5lpptTFwcxvVhCs2b+chCjlghFSWFbB
+            \\ULBrfci2FtliClOVMYrlNBdUSJhf3aYSG2Doe6Bgt1n2CpNn/iu37Y3NfemZBJ
+            \\A7hNl4dYe+f+uzM87cdQ214+jrAoGAXA0XxX8ll2+ToOLJsaNTOvNB9h9Uc5qK5X5w+7G7O998BN2PC/MWp8H+2fVqpXgNENpNXttkRm1hk1dych86EunfdPuqsX+as44oCyJGFHVBnWpm33eWQw9YqANRI+pCJzP08I5WK3osnPiwshd+hR54yjgfYhBFNI7B95PmEQkCgYBzFSz7h1+s34Ycr8SvxsOBWxymG5zaCsUbPsL04aCgLScCHb9J+E86aVbbVFdglYa5Id7DPTL61ixhl7WZjujspeXZGSbmq0KcnckbmDgqkLECiOJW2NHP/j0McAkDLL4tysF8TLDO8gvuvzNC+WQ6drO2ThrypLVZQ+ryeBIPmwKBgEZxhqa0gVvHQG/7Od69KWj4eJP28kq13RhKay8JOoN0vPmspXJo1HY3CKuHRG+AP579dncdUnOMvfXOtkdM4vk0+hWASBQzM9xzVcztCa+koAugjVaLS9A+9uQoqEeVNTckxx0S2bYevRy7hGQmUJTyQm3j1zEUR5jpdbL83Fbq
+            \\-----END PRIVATE KEY-----
+            ;
+        const pubkey = 
+            \\-----BEGIN PUBLIC KEY-----
+            \\MIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5q
+            \\LaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB
+            \\-----END PUBLIC KEY-----
+            ;
+
+        try test_V1Public_EncryptDecrypt_with_pem_key_auto(prikey, pubkey);
+    }
+
+    {
+        const prikey = 
+            \\-----BEGIN PRIVATE KEY-----
+            \\MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDh/nCDmXaEqxN416b9XjV8acmbqA52uPzKbesWQRT/BPxEO2dKAURk5CkcSBDskvfzFR9TRjeDppjD1BPSEnuYKnP0SvmotoxcnBnHMfMBqGV8DSJyppu8k4y9C3MPq5C/rA8TJm0NNaJCL0BfAGkeyw+elgYifbRlm42VfYGsKVyIeEI9Qghk5Cf8yapMPfWNLKOhChXsyGExMBMonHZeseFH7UNwonNAFJMAaelhVqqmwBFqn6fBGKmvedRO7HIaiEFNKaMna6xJ5Bccjds4MhF7UC5PIdx4Bt7CfxvjrbIRYoBF2l30CNBblIhU992zPkHoaVhDkt1gq3OdO7LvAgMBAAECggEBALCJrWTv7ahnZ3efpqAIBuogTVBd8KaHjVmokds5jehFAbdfXClwYfgaT477MNVNXYmzN1w63sTl0DIxqiYRMCFHEHuGUg6cQ3tYqb50Y2spG9XTANTlF4UxEeDfX8ue7xz7kG8aNlf6TL084iEUVgmrAJGWikZJQjGZWPmtKC3OTeJY5Bev5qHVuMRe+XEM5aQc3ph+lXlOF0Qp0Eg8YRWprrev2faH6prMqu2JGomoac6sfM4QJhtEViF7Gw0XPthPTbF19IefuAwi9psMM/9CnQ+MTWN2i6IxoUdicsFuC+Wdlb3K5V/+uldNSr+ePEhcya+YTLK9IOcVwWKQHykCgYEA8XvuEribf+t0ZPtfxr+DC9nZHXbVoFx0/ARpSG+P/fp3Hn3rO9iYQ6OtZ9mEXTzf+dhYTaRWq6PbCOz6i0It+J8QSBdxU9OcQ4871mDe41IvSc1CCGMW4PeIYtNQEK0zrqhN7SMtKyUd7yAsYRCrIzMc7NjE2qJvFw5kh7xC3Q0CgYEA75Qjn5daNYSAOa/ILdOs5J/8oIaO27RNK/fSKm/btsMsyum8+YP/mWmm1MXBzG9WEKzZv5yEKOWCEVJYVsFQsGt9yLYW2WIKU5UxiuU0F1RImF/dphIbYOh7oGC3WfYKk2f+K7ftjc196ZkEkDuE2Xh1h75/67Mzztx1DbXj6OsCgYBcDRfFfyWXb5Og4smxo1M680H2H1RzmorlfnD7sbs733wE3Y8L8xanwf7Z9WqleA0Q2k1e22RGbWGTV3JyHzoS6d90+6qxf5qzjigLIkYUdUGdambfd5ZDD1ioA1Ej6kInM/TwjlYreiyc+LCyF36FHnjKOB9iEEU0jsH3k+YRCQKBgHMVLPuHX6zfhhyvxK/Gw4FbHKYbnNoKxRs+wvThoKAtJwIdv0n4TzppVttUV2CVhrkh3sM9MvrWLGGXtZmO6Oyl5dkZJuarQpydyRuYOCqQsQKI4lbY0c/+PQxwCQMsvi3KwXxMsM7yC+6/M0L5ZDp2s7ZOGvKktVlD6vJ4Eg+bAoGARnGGprSBW8dAb/s53r0paPh4k/bySrXdGEprLwk6g3S8+aylcmjUdjcIq4dEb4A/nv12dx1Sc4y99c62R0zi+TT6FYBIFDMz3HNVzO0Jr6SgC6CNVotL0D725CioR5U1NyTHHRLZth69HLuEZCZQlPJCbePXMRRHmOl1svzcVuo=
+            \\-----END PRIVATE KEY-----
+            ;
+        const pubkey = 
+            \\-----BEGIN PUBLIC KEY-----
+            \\MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4f5wg5l2hKsTeNem/V41fGnJm6gOdrj8ym3rFkEU/wT8RDtnSgFEZOQpHEgQ7JL38xUfU0Y3g6aYw9QT0hJ7mCpz9Er5qLaMXJwZxzHzAahlfA0icqabvJOMvQtzD6uQv6wPEyZtDTWiQi9AXwBpHssPnpYGIn20ZZuNlX2BrClciHhCPUIIZOQn/MmqTD31jSyjoQoV7MhhMTATKJx2XrHhR+1DcKJzQBSTAGnpYVaqpsARap+nwRipr3nUTuxyGohBTSmjJ2usSeQXHI3bODIRe1AuTyHceAbewn8b462yEWKARdpd9AjQW5SIVPfdsz5B6GlYQ5LdYKtznTuy7wIDAQAB
+            \\-----END PUBLIC KEY-----
+            ;
+
+        try test_V1Public_EncryptDecrypt_with_pem_key_auto(prikey, pubkey);
+    }
+}
+
+fn test_V1Public_EncryptDecrypt_with_pem_key_auto(prikey: []const u8, pubkey: []const u8) !void {
+    const m = "{\"data\":\"this is a signed message\",\"exp\":\"2022-01-01T00:00:00+00:00\"}";
+    const f = "{\"kid\":\"dYkISylxQeecEcHELfzF88UZrwbLolNiCdpzUHGw9Uqn\"}";
+    const i = "{\"test-vector\":\"2-S-3\"}";
+
+    const alloc = testing.allocator;
+
+    var secret_key = try paseto.parser.ParseRSAKey.parseSecretKeyPEMAuto(alloc, prikey);
+    const public_key = try paseto.parser.ParseRSAKey.parsePublicKeyPEMAuto(alloc, pubkey);
 
     defer secret_key.deinit(alloc);
 

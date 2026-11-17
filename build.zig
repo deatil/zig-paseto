@@ -13,6 +13,9 @@ pub fn build(b: *std.Build) void {
     });
     mod.addImport("zig-rsa", zig_rsa_dep.module("zig-rsa"));
 
+    const zpem_dep = b.dependency("zpem", .{});
+    mod.addImport("zpem", zpem_dep.module("zpem"));
+
     // -Dtest-filter="..."
     const test_filter = b.option([]const []const u8, "test-filter", "Filter for tests to run");
 
